@@ -360,6 +360,10 @@ pub fn not(a: bool) -> bool {
     }
 }
 
+pub trait Not {
+    fn not(self) -> Self;
+}
+
 impl b256 {
     fn neq(self, other: Self) -> bool {
         // Both self and other are addresses of the values, so we can use MEQ.
