@@ -414,6 +414,15 @@ impl BitwiseXor for u64 {
     }
 }
 
+impl Not for b256 {
+    fn not(self) -> Self {
+        asm(r1, r2: self) {
+            not r1 r2;
+            r1: Self
+        }
+    }
+}
+
 impl BitwiseAnd for b256 {
     pub fn binary_and(val: self, other: Self) -> Self {
         let(value_word_1, value_word_2, value_word_3, value_word_4) = decompose(val);
