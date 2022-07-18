@@ -53,6 +53,10 @@ pub fn tx_input_type(index: u64) -> u8 {
     __gtf::<u8>(index, GTF_INPUT_TYPE)
 }
 
+////////////////////////////////////////
+/// Input Coins
+////////////////////////////////////////
+
 /// Get the tx id of the input coin at `index`.
 pub fn input_coin_tx_id(index: u64) -> b256 {
     __gtf::<b256>(index, GTF_INPUT_COIN_TX_ID)
@@ -145,6 +149,20 @@ pub fn b256_from_pointer_offset(pointer: u64, offset: u64) -> b256 {
         // `buffer` now points to the 32 bytes
         buffer: b256
     }
+}
+
+////////////////////////////////////////
+/// Input Messages
+////////////////////////////////////////
+
+/// Get the owner address of the input message at `index`.
+pub fn input_message_msg_id(index: u64) -> b256 {
+    __gtf::<b256>(index, GTF_INPUT_MESSAGE_MESSAGE_ID)
+}
+
+/// Get the owner address of the input message at `index`.
+pub fn input_message_owner(index: u64) -> Address {
+    ~Address::from(__gtf::<b256>(index, GTF_INPUT_MESSAGE_OWNER))
 }
 
 /// Get the owner address of the input message at `index`.
