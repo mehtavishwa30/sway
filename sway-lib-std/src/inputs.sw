@@ -210,7 +210,10 @@ pub fn input_message_predicate_data(index: u64) -> T {
     read::<T>(__gtf::<u64>(index, GTF_INPUT_MESSAGE_DATA))
 }
 
-// const GTF_INPUT_MESSAGE_PREDICATE = 0x11F;
+/// Get the predicate of the input message at `index`.
+pub fn input_message_predicate(index: u64) -> T {
+    read::<T>(__gtf::<u64>(index, GTF_INPUT_MESSAGE_PREDICATE))
+}
 
 /// Get predicate data from message at `index`.
 pub fn input_message_predicate_data(index: u64) -> T {
