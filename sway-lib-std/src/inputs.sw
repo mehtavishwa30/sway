@@ -195,7 +195,11 @@ pub fn input_message_data_length(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_MESSAGE_DATA_LENGTH)
 }
 
-// const GTF_INPUT_MESSAGE_PREDICATE_LENGTH = 0x11C;
+/// Get the predicate length of the input message at `index`.
+pub fn input_message_predicate_length(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_MESSAGE_PREDICATE_LENGTH)
+}
+
 // const GTF_INPUT_MESSAGE_PREDICATE_DATA_LENGTH = 0x11D;
 // const GTF_INPUT_MESSAGE_DATA = 0x11E;
 // const GTF_INPUT_MESSAGE_PREDICATE = 0x11F;
