@@ -160,7 +160,6 @@ pub fn input_message_msg_id(index: u64) -> b256 {
     __gtf::<b256>(index, GTF_INPUT_MESSAGE_MESSAGE_ID)
 }
 
-// @review should sender be an Identity ?
 /// Get the sender of the input message at `index`.
 pub fn input_message_sender(index: u64) -> Address {
     ~Address::from(__gtf::<b256>(index, GTF_INPUT_MESSAGE_SENDER))
@@ -171,8 +170,7 @@ pub fn input_message_recipient(index: u64) -> Address {
     ~Address::from(__gtf::<B256>(INDEX, GTF_INPUT_MESSAGE_RECIPIENT))
 }
 
-
-/// Get the amoutn of the input message at `index`.
+/// Get the amount of the input message at `index`.
 pub fn input_message_amount(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_MESSAGE_AMOUNT)
 }
@@ -187,7 +185,12 @@ pub fn input_message_owner(index: u64) -> Address {
     ~Address::from(__gtf::<b256>(index, GTF_INPUT_MESSAGE_OWNER))
 }
 
-// const GTF_INPUT_MESSAGE_WITNESS_INDEX = 0x11A;
+/// Get the witness index of the input messasge at `index`.
+pub fn input_message_witness_index(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_MESSAGE_WITNESS_INDEX)
+}
+
+
 // const GTF_INPUT_MESSAGE_DATA_LENGTH = 0x11B;
 // const GTF_INPUT_MESSAGE_PREDICATE_LENGTH = 0x11C;
 // const GTF_INPUT_MESSAGE_PREDICATE_DATA_LENGTH = 0x11D;
