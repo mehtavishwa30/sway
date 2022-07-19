@@ -166,10 +166,30 @@ pub fn input_message_sender(index: u64) -> Address {
     ~Address::from(__gtf::<b256>(index, GTF_INPUT_MESSAGE_SENDER))
 }
 
+/// Get the recipient of the input message at `index`.
+pub fn input_message_recipient(index: u64) -> Address {
+    ~Address::from(__gtf::<B256>(INDEX, GTF_INPUT_MESSAGE_RECIPIENT))
+}
+
+
+/// Get the amoutn of the input message at `index`.
+pub fn input_message_amount(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_MESSAGE_AMOUNT)
+}
+
+// const GTF_INPUT_MESSAGE_NONCE = 0x118;
+
 /// Get the owner address of the input message at `index`.
 pub fn input_message_owner(index: u64) -> Address {
     ~Address::from(__gtf::<b256>(index, GTF_INPUT_MESSAGE_OWNER))
 }
+
+// const GTF_INPUT_MESSAGE_WITNESS_INDEX = 0x11A;
+// const GTF_INPUT_MESSAGE_DATA_LENGTH = 0x11B;
+// const GTF_INPUT_MESSAGE_PREDICATE_LENGTH = 0x11C;
+// const GTF_INPUT_MESSAGE_PREDICATE_DATA_LENGTH = 0x11D;
+// const GTF_INPUT_MESSAGE_DATA = 0x11E;
+// const GTF_INPUT_MESSAGE_PREDICATE = 0x11F;
 
 /// Get predicate data from message at `index`.
 pub fn input_message_predicate_data(index: u64) -> T {
