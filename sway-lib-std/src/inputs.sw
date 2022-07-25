@@ -13,8 +13,8 @@ const GTF_INPUT_COIN_OWNER = 0x104;
 const GTF_INPUT_COIN_AMOUNT = 0x105;
 const GTF_INPUT_COIN_ASSET_ID = 0x106;
 const GTF_INPUT_COIN_TX_POINTER = 0x107;
-// const GTF_INPUT_COIN_WITNESS_INDEX = 0x108;
-// const GTF_INPUT_COIN_MATURITY = 0x109;
+const GTF_INPUT_COIN_WITNESS_INDEX = 0x108;
+const GTF_INPUT_COIN_MATURITY = 0x109;
 // const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
 // const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
 // const GTF_INPUT_COIN_PREDICATE = 0x10C;
@@ -93,7 +93,11 @@ pub fn input_coin_witness_index(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_COIN_WITNESS_INDEX)
 }
 
-// const GTF_INPUT_COIN_MATURITY = 0x109;
+// Get the maturity of the input coin at `index`.
+pub fn input_coin_maturity(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_COIN_MATURITY)
+}
+
 // const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
 // const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
 // const GTF_INPUT_COIN_PREDICATE = 0x10C;
