@@ -78,6 +78,19 @@ pub fn input_coin_owner(index: u64) -> Address {
     ~Address::from(__gtf::<b256>(index, GTF_INPUT_COIN_OWNER))
 }
 
+// Get the asset id of the input coin at `index`.
+pub fn input_coin_asset_id(index: u64) -> ContractId {
+    ~ContractId::from(__gtf::<b256>(index, GTF_INPUT_COIN_ASSET_ID))
+}
+
+
+// const GTF_INPUT_COIN_TX_POINTER = 0x107;
+// const GTF_INPUT_COIN_WITNESS_INDEX = 0x108;
+// const GTF_INPUT_COIN_MATURITY = 0x109;
+// const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
+// const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
+// const GTF_INPUT_COIN_PREDICATE = 0x10C;
+
 /// Get predicate data from InputCoin at `index`.
 pub fn input_coin_predicate_data(index: u64) -> T {
     read::<T>(__gtf::<u64>(index, GTF_INPUT_COIN_PREDICATE_DATA))
