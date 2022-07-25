@@ -16,7 +16,7 @@ const GTF_INPUT_COIN_TX_POINTER = 0x107;
 const GTF_INPUT_COIN_WITNESS_INDEX = 0x108;
 const GTF_INPUT_COIN_MATURITY = 0x109;
 const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
-// const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
+const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
 // const GTF_INPUT_COIN_PREDICATE = 0x10C;
 const GTF_INPUT_COIN_PREDICATE_DATA = 0x10D;
 
@@ -78,35 +78,43 @@ pub fn input_coin_owner(index: u64) -> Address {
     ~Address::from(__gtf::<b256>(index, GTF_INPUT_COIN_OWNER))
 }
 
-// Get the asset id of the input coin at `index`.
+/// Get the asset id of the input coin at `index`.
 pub fn input_coin_asset_id(index: u64) -> ContractId {
     ~ContractId::from(__gtf::<b256>(index, GTF_INPUT_COIN_ASSET_ID))
 }
 
-// Get the tx pointer from the input coin at `index`.
+/// Get the tx pointer from the input coin at `index`.
 pub fn input_coin_tx_pointer(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_COIN_TX_POINTER)
 }
 
-// Get the witness index from the input coin at `index`.
+/// Get the witness index from the input coin at `index`.
 pub fn input_coin_witness_index(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_COIN_WITNESS_INDEX)
 }
 
-// Get the maturity of the input coin at `index`.
+/// Get the maturity of the input coin at `index`.
 pub fn input_coin_maturity(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_COIN_MATURITY)
 }
 
-// Get the predicate length from the input coin at `index`.
+/// Get the predicate length from the input coin at `index`.
 pub fn input_coin_predicate_length(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_COIN_PREDICATE_LENGTH)
 }
 
-// const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
-// const GTF_INPUT_COIN_PREDICATE = 0x10C;
+/// Get predicate data from the input coin at `index`.
+pub fn input_coin_predicate_data_length(iondex: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_COIN_PREDICATE_DATA_LENGTH)
+}
 
-/// Get predicate data from InputCoin at `index`.
+// @review return type. should we just return a pointer and rename the func?
+/// Get predicate from input coin at `index`.
+pub fn input_coin_predicate_pointer(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_COIN_PREDICATE)
+}
+
+/// Get predicate data from input coin at `index`.
 pub fn input_coin_predicate_data(index: u64) -> T {
     read::<T>(__gtf::<u64>(index, GTF_INPUT_COIN_PREDICATE_DATA))
 }
