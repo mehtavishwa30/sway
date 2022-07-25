@@ -80,7 +80,7 @@ pub fn input_coin_owner(index: u64) -> Address {
 
 /// Get the asset id of the input coin at `index`.
 pub fn input_coin_asset_id(index: u64) -> ContractId {
-    ~ContractId::from(__gtf::<b256>(index, GTF_INPUT_COIN_ASSET_ID))
+    ~ContractId::from(read::<b256>(__gtf::<u64>(index, GTF_INPUT_COIN_ASSET_ID)))
 }
 
 /// Get the tx pointer from the input coin at `index`.
