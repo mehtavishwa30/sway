@@ -15,7 +15,7 @@ const GTF_INPUT_COIN_ASSET_ID = 0x106;
 const GTF_INPUT_COIN_TX_POINTER = 0x107;
 const GTF_INPUT_COIN_WITNESS_INDEX = 0x108;
 const GTF_INPUT_COIN_MATURITY = 0x109;
-// const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
+const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
 // const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
 // const GTF_INPUT_COIN_PREDICATE = 0x10C;
 const GTF_INPUT_COIN_PREDICATE_DATA = 0x10D;
@@ -98,7 +98,11 @@ pub fn input_coin_maturity(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_INPUT_COIN_MATURITY)
 }
 
-// const GTF_INPUT_COIN_PREDICATE_LENGTH = 0x10A;
+// Get the predicate length from the input coin at `index`.
+pub fn input_coin_predicate_length(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_COIN_PREDICATE_LENGTH)
+}
+
 // const GTF_INPUT_COIN_PREDICATE_DATA_LENGTH = 0x10B;
 // const GTF_INPUT_COIN_PREDICATE = 0x10C;
 
