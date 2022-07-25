@@ -83,6 +83,10 @@ pub fn input_coin_asset_id(index: u64) -> ContractId {
     ~ContractId::from(__gtf::<b256>(index, GTF_INPUT_COIN_ASSET_ID))
 }
 
+// Get the tx pointer from the input coin at `index`.
+pub fn input_coin_tx_pointer(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_INPUT_COIN_TX_POINTER)
+}
 
 // const GTF_INPUT_COIN_TX_POINTER = 0x107;
 // const GTF_INPUT_COIN_WITNESS_INDEX = 0x108;
