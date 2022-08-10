@@ -26,7 +26,7 @@ const GTF_OUTPUT_CONTRACT_BALANCE_ROOT = 0x206;
 const GTF_OUTPUT_CONTRACT_STATE_ROOT = 0x207;
 const GTF_OUTPUT_MESSAGE_RECIPIENT = 0x208;
 const GTF_OUTPUT_MESSAGE_AMOUNT = 0x209;
-// const GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID = 0x20A;
+const GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID = 0x20A;
 // const GTF_OUTPUT_CONTRACT_CREATED_STATE_ROOT = 0x20B;
 
 // Output types
@@ -101,31 +101,6 @@ pub fn output_coin_to(index: u64) -> b256 {
     read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_COIN_TO))
 }
 
-/// Get the amount of coins to send for the output at `index`.
-/// This method is only meaningful if the output type has the `amount` field.
-/// Specifically: OutputCoin, OutputMessage, OutputChange, OutputVariable.
-pub fn output_amount(index: u64) -> u64 {
-    let type = output_type(index);
-    match type {
-        Output::Coin => {
-            __gtf::<u64>(index, GTF_OUTPUT_COIN_AMOUNT)
-        },
-        Output::Contract => {
-            revert(0);
-        },
-        Output::Message => {
-            __gtf::<u64>(index, GTF_OUTPUT_MESSAGE_AMOUNT)
-        },
-        // reuse GTF_OUTPUT_MESSAGE_AMOUNT for Output::Change & Output::Variable
-        Output::Change => {
-            __gtf::<u64>(index, GTF_OUTPUT_MESSAGE_AMOUNT)
-        },
-        Output::Variable => {
-            __gtf::<u64>(index, GTF_OUTPUT_MESSAGE_AMOUNT)
-        },
-    }
-}
-
 /// Get the asset id of the OutputCoin at `index`.
 pub fn output_coin_asset_id(index: u64) -> ContractId {
     ~ContractId::from(read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_COIN_ASSET_ID)))
@@ -151,3 +126,34 @@ pub fn output_contract_state_root(index: u64) -> b256 {
 pub fn output_message_recipient(index: u64) -> b256 {
     read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_MESSAGE_RECIPIENT))
 }
+
+/// Get the amount of coins to send for the output at `index`.
+/// This method is only meaningful if the output type has the `amount` field.
+/// Specifically: OutputCoin, OutputMessage, OutputChange, OutputVariable.
+pub fn output_amount(index: u64) -> u64 {
+    let type = output_type(index);
+    match type {
+        Output::Coin => {
+            __gtf::<u64>(index, GTF_OUTPUT_COIN_AMOUNT)
+        },
+        Output::Contract => {
+            revert(0);
+        },
+        Output::Message => {
+            __gtf::<u64>(index, GTF_OUTPUT_MESSAGE_AMOUNT)
+        },
+        // reuse GTF_OUTPUT_MESSAGE_AMOUNT for Output::Change & Output::Variable
+        Output::Change => {
+            __gtf::<u64>(index, GTF_OUTPUT_MESSAGE_AMOUNT)
+        },
+        Output::Variable => {
+            __gtf::<u64>(index, GTF_OUTPUT_MESSAGE_AMOUNT)
+        },
+    }
+}
+
+/// Get the created contract id field from the OutputContract at `index`.
+pub fn output_contract_created_contract_id(index: u64) -> ContractId {
+    ~ContractId::from(read::<b256>(__gtf::<u64> (index, GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID)))
+}
+
