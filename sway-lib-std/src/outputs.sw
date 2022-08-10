@@ -2,6 +2,7 @@
 //! This includes OutputCoins, OutputContracts and OutputMessages.
 library outputs;
 
+use ::contract_id::ContractId;
 use ::mem::read;
 use ::revert::revert;
 use ::tx::{
@@ -27,7 +28,7 @@ const GTF_OUTPUT_CONTRACT_STATE_ROOT = 0x207;
 const GTF_OUTPUT_MESSAGE_RECIPIENT = 0x208;
 const GTF_OUTPUT_MESSAGE_AMOUNT = 0x209;
 const GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID = 0x20A;
-// const GTF_OUTPUT_CONTRACT_CREATED_STATE_ROOT = 0x20B;
+const GTF_OUTPUT_CONTRACT_CREATED_STATE_ROOT = 0x20B;
 
 // Output types
 pub const OUTPUT_COIN = 0u8;
@@ -155,5 +156,10 @@ pub fn output_amount(index: u64) -> u64 {
 /// Get the created contract id field from the OutputContract at `index`.
 pub fn output_contract_created_contract_id(index: u64) -> ContractId {
     ~ContractId::from(read::<b256>(__gtf::<u64> (index, GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID)))
+}
+
+/// Get the created state root field from the OutputContract at `index`.
+pub fn output_contract_created_state_root(index: u64) -> ContractId {
+    ~ContractId::from(read::<b256>(__gtf::<u64> (index, GTF_OUTPUT_CONTRACT_CREATED_STATE_ROOT)))
 }
 
