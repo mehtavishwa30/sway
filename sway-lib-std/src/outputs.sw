@@ -24,7 +24,7 @@ const GTF_OUTPUT_COIN_ASSET_ID = 0x204;
 const GTF_OUTPUT_CONTRACT_INPUT_INDEX = 0x205;
 const GTF_OUTPUT_CONTRACT_BALANCE_ROOT = 0x206;
 const GTF_OUTPUT_CONTRACT_STATE_ROOT = 0x207;
-// const GTF_OUTPUT_MESSAGE_RECIPIENT = 0x208;
+const GTF_OUTPUT_MESSAGE_RECIPIENT = 0x208;
 const GTF_OUTPUT_MESSAGE_AMOUNT = 0x209;
 // const GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID = 0x20A;
 // const GTF_OUTPUT_CONTRACT_CREATED_STATE_ROOT = 0x20B;
@@ -144,4 +144,10 @@ pub fn output_contract_balance_root(index: u64) -> b256 {
 /// Get the state root of the OutputContract at `index`.
 pub fn output_contract_state_root(index: u64) -> b256 {
     read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_CONTRACT_STATE_ROOT))
+}
+
+/// Get the recipient field of the OutputMessage at `index`.
+// @review should this return an `Address`?
+pub fn output_message_recipient(index: u64) -> b256 {
+    read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_MESSAGE_RECIPIENT))
 }
