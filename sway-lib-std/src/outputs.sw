@@ -18,7 +18,7 @@ use ::tx::{
 ////////////////////////////////////////
 
 const GTF_OUTPUT_TYPE = 0x201;
-// const GTF_OUTPUT_COIN_TO = 0x202;
+const GTF_OUTPUT_COIN_TO = 0x202;
 const GTF_OUTPUT_COIN_AMOUNT = 0x203;
 // const GTF_OUTPUT_COIN_ASSET_ID = 0x204;
 // const GTF_OUTPUT_CONTRACT_INPUT_INDEX = 0x205;
@@ -65,6 +65,11 @@ pub fn output_type(index: u64) -> Output {
             revert(0);
         },
     }
+}
+
+/// Get a pointer to the `to` field of the OutputCoin at `index`.
+pub fn output_coin_to(index: u64) -> u64 {
+    __gtf::<u64>(index, GTF_OUTPUT_COIN_TO)
 }
 
 /// Get a pointer to the Ouput at `index`
