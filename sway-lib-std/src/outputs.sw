@@ -23,7 +23,7 @@ const GTF_OUTPUT_COIN_AMOUNT = 0x203;
 const GTF_OUTPUT_COIN_ASSET_ID = 0x204;
 const GTF_OUTPUT_CONTRACT_INPUT_INDEX = 0x205;
 const GTF_OUTPUT_CONTRACT_BALANCE_ROOT = 0x206;
-// const GTF_OUTPUT_CONTRACT_STATE_ROOT = 0x207;
+const GTF_OUTPUT_CONTRACT_STATE_ROOT = 0x207;
 // const GTF_OUTPUT_MESSAGE_RECIPIENT = 0x208;
 const GTF_OUTPUT_MESSAGE_AMOUNT = 0x209;
 // const GTF_OUTPUT_CONTRACT_CREATED_CONTRACT_ID = 0x20A;
@@ -136,6 +136,12 @@ pub fn output_contract_input_index(index: u64) -> u64 {
     __gtf::<u64>(index, GTF_OUTPUT_CONTRACT_INPUT_INDEX)
 }
 
-pun fn output_contract_balance_root(index: u64) -> b256 {
+/// Get the balance root of the OutputContract at `index`.
+pub fn output_contract_balance_root(index: u64) -> b256 {
     read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_CONTRACT_BALANCE_ROOT))
+}
+
+/// Get the state root of the OutputContract at `index`.
+pub fn output_contract_state_root(index: u64) -> b256 {
+    read::<b256>(__gtf::<u64>(index, GTF_OUTPUT_CONTRACT_STATE_ROOT))
 }
