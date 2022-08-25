@@ -1,0 +1,7 @@
+[project]
+authors = ["Nicholas Furfaro"]
+entry = "test_contract.sw"
+license = "Apache-2.0"
+name = "gtf_intrinsic_bug"
+
+[dependencies]
