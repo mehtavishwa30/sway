@@ -1,6 +1,7 @@
 use super::*;
 use crate::concurrent_slab::ConcurrentSlab;
 use crate::namespace::{Path, Root};
+use dashmap::DashMap;
 use lazy_static::lazy_static;
 use sway_types::span::Span;
 use sway_types::{Ident, Spanned};
@@ -13,11 +14,24 @@ lazy_static! {
 pub(crate) struct TypeEngine {
     slab: ConcurrentSlab<TypeId, TypeInfo>,
     storage_only_types: ConcurrentSlab<TypeId, TypeInfo>,
+    reusable_types: DashMap<TypeInfo, TypeId>,
 }
 
 impl TypeEngine {
     pub fn insert_type(&self, ty: TypeInfo) -> TypeId {
-        self.slab.insert(ty)
+        if ty.contains_free_variables() {
+            self.slab.insert(ty)
+        } else {
+            match self.reusable_types.get(&ty) {
+                Some(type_id) => *type_id,
+                None => {
+                    let type_id = self.slab.insert(ty.clone());
+                    self.reusable_types.insert(ty, type_id);
+                    type_id
+                }
+            }
+        }
+        // self.slab.insert(ty)
     }
 
     pub fn look_up_type_id_raw(&self, id: TypeId) -> TypeInfo {

@@ -1230,6 +1230,68 @@ impl TypeInfo {
         }
     }
 
+    pub(crate) fn contains_free_variables(&self) -> bool {
+        match self {
+            TypeInfo::Ref(id, _) => look_up_type_id(*id).contains_free_variables(),
+            TypeInfo::Tuple(elems) => !elems
+                .iter()
+                .map(|elem| look_up_type_id(elem.type_id).contains_free_variables())
+                .any(|x| x),
+            TypeInfo::Storage { fields } => !fields
+                .iter()
+                .map(|field| look_up_type_id(field.type_id).contains_free_variables())
+                .any(|x| x),
+            TypeInfo::Array(id, _, _) => look_up_type_id(*id).contains_free_variables(),
+            TypeInfo::Enum {
+                type_parameters,
+                variant_types,
+                ..
+            } => {
+                !type_parameters
+                    .iter()
+                    .map(|type_parameter| {
+                        look_up_type_id(type_parameter.type_id).contains_free_variables()
+                    })
+                    .any(|x| x)
+                    && !variant_types
+                        .iter()
+                        .map(|variant_type| {
+                            look_up_type_id(variant_type.type_id).contains_free_variables()
+                        })
+                        .any(|x| x)
+            }
+            TypeInfo::Struct {
+                type_parameters,
+                fields,
+                ..
+            } => {
+                !type_parameters
+                    .iter()
+                    .map(|type_parameter| {
+                        look_up_type_id(type_parameter.type_id).contains_free_variables()
+                    })
+                    .any(|x| x)
+                    && !fields
+                        .iter()
+                        .map(|field| look_up_type_id(field.type_id).contains_free_variables())
+                        .any(|x| x)
+            }
+            TypeInfo::Byte
+            | TypeInfo::B256
+            | TypeInfo::Numeric
+            | TypeInfo::Contract
+            | TypeInfo::ErrorRecovery
+            | TypeInfo::Str(_)
+            | TypeInfo::UnsignedInteger(_)
+            | TypeInfo::Boolean => false,
+            TypeInfo::Unknown
+            | TypeInfo::UnknownGeneric { .. }
+            | TypeInfo::SelfType
+            | TypeInfo::Custom { .. }
+            | TypeInfo::ContractCaller { .. } => true,
+        }
+    }
+
     /// Given a `TypeInfo` `self`, expect that `self` is a `TypeInfo::Tuple`,
     /// and return its contents.
     ///

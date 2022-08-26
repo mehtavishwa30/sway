@@ -3612,6 +3612,7 @@ name = "sway-core"
 version = "0.20.2"
 dependencies = [
  "clap 3.2.17",
+ "dashmap",
  "derivative",
  "dirs 3.0.2",
  "either",
