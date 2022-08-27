@@ -107,8 +107,9 @@ pub const TEST:u16=10;"#;
 pub const TEST: u16 = 10;
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -129,8 +130,9 @@ pub struct Foo<T, P> {
 
         let mut formatter = Formatter::default();
         formatter.config.structures.field_alignment = FieldAlignment::AlignFields(40);
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -148,8 +150,9 @@ pub struct Foo {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -174,8 +177,9 @@ enum Color {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -203,8 +207,9 @@ enum Color {
         let mut formatter = Formatter::default();
         formatter.config.structures.field_alignment = FieldAlignment::AlignFields(20);
 
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -226,8 +231,9 @@ abi StorageMapExample {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -244,8 +250,9 @@ pub const TEST1: u16 = 10;
 "#;
 
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -280,8 +287,9 @@ enum TestTy {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code);
     }
     #[test]
@@ -316,8 +324,9 @@ storage {
 "#;
 
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -353,8 +362,9 @@ storage {
 
         let mut formatter = Formatter::default();
         formatter.config.structures.field_alignment = FieldAlignment::AlignFields(50);
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -405,8 +415,9 @@ storage {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -427,8 +438,9 @@ fn goodbye() -> usize {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -447,8 +459,9 @@ where
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -477,8 +490,9 @@ trait CompSciStudent: Programmer + Student {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -571,8 +585,9 @@ fn main() -> bool {
         let mut formatter = Formatter::default();
         formatter.config.structures.small_structures_single_line = true;
         formatter.config.whitespace.max_width = 220;
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -621,8 +636,9 @@ pub struct Foo { // Here is a comment
 // This is a comment
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -652,8 +668,9 @@ pub enum Bazz { // Here is a comment
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code);
     }
 
@@ -674,8 +691,9 @@ fn hello_world(baz: /* this is a comment */ u64) {
 "#;
 
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code);
     }
 
@@ -699,8 +717,9 @@ abi StorageMapExample {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code);
     }
 
@@ -712,8 +731,9 @@ pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next 
 pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next to a const
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code);
     }
     #[test]
@@ -748,8 +768,9 @@ storage {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code);
     }
 
@@ -770,8 +791,9 @@ trait Programmer {
 "#;
 
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -791,8 +813,9 @@ where /* This is next to where */
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
     #[test]
@@ -837,8 +860,9 @@ impl<A, B> Qux<A, B> for Foo where
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -878,8 +902,9 @@ impl Qux for Foo {
 }
 "#;
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 
@@ -912,8 +937,9 @@ fn main() {
 "#;
 
         let mut formatter = Formatter::default();
-        let formatted_sway_code =
-            Formatter::format(&mut formatter, Arc::from(sway_code_to_format), None).unwrap();
+        let formatted_sway_code = formatter
+            .format(Arc::from(sway_code_to_format), None)
+            .unwrap();
         assert_eq!(correct_sway_code, formatted_sway_code)
     }
 }
