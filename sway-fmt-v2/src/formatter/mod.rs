@@ -95,6 +95,7 @@ impl Formatter {
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
     use insta::assert_snapshot;
 
     use super::Formatter;
@@ -103,8 +104,10 @@ mod tests {
 
     #[test]
     fn test_const() {
-        let sway_code_to_format = r#"contract;
-pub const TEST:u16=10;"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        pub const TEST:u16=10;
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -117,12 +120,13 @@ pub const TEST:u16=10;"#;
 
     #[test]
     fn test_struct_alignment() {
-        let sway_code_to_format = r#"contract;
-pub struct Foo<T, P> {
-   barbazfoo: u64,
-   baz  : bool,
-}
-"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        pub struct Foo<T, P> {
+        barbazfoo: u64,
+        baz  : bool,
+        }
+        "};
         let mut formatter = Formatter::default();
         formatter.config.structures.field_alignment = FieldAlignment::AlignFields(40);
         let formatted_sway_code = formatter
@@ -138,12 +142,13 @@ pub struct Foo<T, P> {
     }
     #[test]
     fn test_struct() {
-        let sway_code_to_format = r#"contract;
-pub struct Foo {
-    bar: u64,
-    baz: bool
-}
-"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        pub struct Foo {
+            bar: u64,
+            baz: bool
+        }
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -159,14 +164,15 @@ pub struct Foo {
 
     #[test]
     fn test_enum_without_variant_alignment() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-enum Color {
-    Blue: (), Green: (),
-            Red: (),
-    Silver: (),
-                    Grey: () }
-        "#;
+        enum Color {
+            Blue: (), Green: (),
+                    Red: (),
+            Silver: (),
+                            Grey: () }
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -185,14 +191,15 @@ enum Color {
     }
     #[test]
     fn test_enum_with_variant_alignment() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-enum Color {
-    Blue: (), Green: (),
-            Red: (),
-    Silver: (),
-                    Grey: (), }
-        "#;
+        enum Color {
+            Blue: (), Green: (),
+                    Red: (),
+            Silver: (),
+                            Grey: (), }
+        "};
         // Creating a config with enum_variant_align_threshold that exceeds longest variant length
         let mut formatter = Formatter::default();
         formatter.config.structures.field_alignment = FieldAlignment::AlignFields(20);
@@ -214,13 +221,14 @@ enum Color {
     }
     #[test]
     fn test_item_abi_with_generics_and_attributes() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-abi StorageMapExample {
-    #[storage(write)]fn insert_into_map1(key: u64, value: u64);
+        abi StorageMapExample {
+            #[storage(write)]fn insert_into_map1(key: u64, value: u64);
 
-fn hello(key: u64, value: u64);
-}"#;
+        fn hello(key: u64, value: u64);
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -239,10 +247,11 @@ fn hello(key: u64, value: u64);
 
     #[test]
     fn test_multi_items() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-pub const TEST: u16 = 10;
-pub const TEST1: u16 = 10;"#;
+        pub const TEST: u16 = 10;
+        pub const TEST1: u16 = 10;"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -256,24 +265,25 @@ pub const TEST1: u16 = 10;"#;
     }
     #[test]
     fn test_ty_formatting() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-enum TestTy {
-    Infer:
-    _,
-    Array : [u8;
-    40],
-    String:         str[
-    4
-    ],
-    PathType     : root::
-example::
-    type,
-    TupleNil: (),
-    Tuple: (   u64,
-        u32
-    ),
-}"#;
+        enum TestTy {
+            Infer:
+            _,
+            Array : [u8;
+            40],
+            String:         str[
+            4
+            ],
+            PathType     : root::
+        example::
+            type,
+            TupleNil: (),
+            Tuple: (   u64,
+                u32
+            ),
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -293,7 +303,8 @@ example::
     }
     #[test]
     fn test_storage_without_alignment() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
         struct Type1 {
             foo: u64,
         }
@@ -306,7 +317,7 @@ example::
          var1: Type1=Type1{ foo: 8 },
               var2: Type2=Type2{ bar: 9 },
         }
-        "#;
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -329,20 +340,21 @@ example::
     }
     #[test]
     fn test_storage_with_alignment() {
-        let sway_code_to_format = r#"contract;
-struct Type1 {
-    foo: u64,
-}
+        let sway_code_to_format = indoc! {r"
+        contract;
+        struct Type1 {
+            foo: u64,
+        }
 
-struct Type2 {
-    bar: u64,
-}
+        struct Type2 {
+            bar: u64,
+        }
 
-storage {
- long_var_name: Type1=Type1{ foo: 8 },
-      var2: Type2=Type2{ bar: 9 },
-}
-"#;
+        storage {
+        long_var_name: Type1=Type1{ foo: 8 },
+            var2: Type2=Type2{ bar: 9 },
+        }
+        "};
         let mut formatter = Formatter::default();
         formatter.config.structures.field_alignment = FieldAlignment::AlignFields(50);
         let formatted_sway_code = formatter
@@ -366,31 +378,32 @@ storage {
     }
     #[test]
     fn test_storage_initializer() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-struct Type1 {
-    x: u64,
-    y: u64,
-}
+        struct Type1 {
+            x: u64,
+            y: u64,
+        }
 
-struct Type2 {
-    w: b256,
-    z: bool,
-}
+        struct Type2 {
+            w: b256,
+            z: bool,
+        }
 
-storage {
-    var1: Type1 = Type1 {
+        storage {
+            var1: Type1 = Type1 {
 
 
 
-        x: 0,
+                x: 0,
 
-        y:
-        0,
-        },
-    var2: Type2 = Type2 { w: 0x0000000000000000000000000000000000000000000000000000000000000000,z: false,
-    },
-}"#;
+                y:
+                0,
+                },
+            var2: Type2 = Type2 { w: 0x0000000000000000000000000000000000000000000000000000000000000000,z: false,
+            },
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -419,10 +432,11 @@ storage {
     }
     #[test]
     fn test_item_fn() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-pub fn hello( person: String ) -> String {let greeting = 42;greeting.to_string()}
-fn goodbye() -> usize {let farewell: usize = 5; farewell }"#;
+        pub fn hello( person: String ) -> String {let greeting = 42;greeting.to_string()}
+        fn goodbye() -> usize {let farewell: usize = 5; farewell }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -442,9 +456,10 @@ fn goodbye() -> usize {let farewell: usize = 5; farewell }"#;
     }
     #[test]
     fn test_same_line_where() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-pub fn hello( person: String ) -> String where T: Eq,{let greeting = 42;greeting.to_string()}"#;
+        pub fn hello( person: String ) -> String where T: Eq,{let greeting = 42;greeting.to_string()}"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -463,12 +478,13 @@ pub fn hello( person: String ) -> String where T: Eq,{let greeting = 42;greeting
     }
     #[test]
     fn test_trait_and_super_trait() {
-        let sway_code_to_format = r#"library traits;
+        let sway_code_to_format = indoc! {r"
+        library traits;
 
-trait Person{ fn name( self )->String;fn age( self )->usize; }
-trait Student:Person {fn university(self) -> String;}
-trait Programmer {fn fav_language(self) -> String;}
-trait CompSciStudent: Programmer+Student {fn git_username(self) -> String;}"#;
+        trait Person{ fn name( self )->String;fn age( self )->usize; }
+        trait Student:Person {fn university(self) -> String;}
+        trait Programmer {fn fav_language(self) -> String;}
+        trait CompSciStudent: Programmer+Student {fn git_username(self) -> String;}"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -494,52 +510,53 @@ trait CompSciStudent: Programmer+Student {fn git_username(self) -> String;}"#;
     }
     #[test]
     fn test_method_calls() {
-        let sway_code_to_format = r#"script;
+        let sway_code_to_format = indoc! {r"
+        script;
 
-struct Opts {
-    gas: u64,
-    coins: u64,
-    id: ContractId,
-}
+        struct Opts {
+            gas: u64,
+            coins: u64,
+            id: ContractId,
+        }
 
-fn  main(       ) -> bool{
-    let default_gas  = 1_000_000_000_000           ;let fuelcoin_id = ~ContractId::from(0x018f59fe434b323a5054e7bb41de983f4926a3c5d3e4e1f9f33b5f0f0e611889);
+        fn  main(       ) -> bool{
+            let default_gas  = 1_000_000_000_000           ;let fuelcoin_id = ~ContractId::from(0x018f59fe434b323a5054e7bb41de983f4926a3c5d3e4e1f9f33b5f0f0e611889);
 
-    let balance_test_id = ~ContractId :: from( 0x597e5ddb1a6bec92a96a73e4f0bc6f6e3e7b21f5e03e1c812cd63cffac480463 ) ;
+            let balance_test_id = ~ContractId :: from( 0x597e5ddb1a6bec92a96a73e4f0bc6f6e3e7b21f5e03e1c812cd63cffac480463 ) ;
 
-    let fuel_coin = abi(    TestFuelCoin, fuelcoin_id.into(       ) ) ;
+            let fuel_coin = abi(    TestFuelCoin, fuelcoin_id.into(       ) ) ;
 
-    assert(fuelcoin_balance == 0);
+            assert(fuelcoin_balance == 0);
 
-    fuel_coin.mint        {
-        gas:             default_gas
-    }
+            fuel_coin.mint        {
+                gas:             default_gas
+            }
 
-    (11);
+            (11);
 
-    fuelcoin_balance = balance_of(fuelcoin_id, fuelcoin_id);
-    assert( fuelcoin_balance   == 11 ) ;
+            fuelcoin_balance = balance_of(fuelcoin_id, fuelcoin_id);
+            assert( fuelcoin_balance   == 11 ) ;
 
-    fuel_coin.burn {
-        gas: default_gas
-    }
-    (7);
+            fuel_coin.burn {
+                gas: default_gas
+            }
+            (7);
 
-    fuelcoin_balance = balance_of(fuelcoin_id, fuelcoin_id);
-    assert(fuelcoin_balance == 4);
+            fuelcoin_balance = balance_of(fuelcoin_id, fuelcoin_id);
+            assert(fuelcoin_balance == 4);
 
-    fuel_coin.force_transfer {
-        gas: default_gas
-    }
-    (3, fuelcoin_id, balance_test_id);
+            fuel_coin.force_transfer {
+                gas: default_gas
+            }
+            (3, fuelcoin_id, balance_test_id);
 
-    fuelcoin_balance = balance_of(fuelcoin_id, fuelcoin_id);
-    let balance_test_contract_balance = balance_of(fuelcoin_id, balance_test_id);
-    assert(fuelcoin_balance == 1);
-    assert(balance_test_contract_balance == 3);
+            fuelcoin_balance = balance_of(fuelcoin_id, fuelcoin_id);
+            let balance_test_contract_balance = balance_of(fuelcoin_id, balance_test_id);
+            assert(fuelcoin_balance == 1);
+            assert(balance_test_contract_balance == 3);
 
-    true
-}"#;
+            true
+        }"};
         let mut formatter = Formatter::default();
         formatter.config.structures.small_structures_single_line = true;
         formatter.config.whitespace.max_width = 220;
@@ -589,29 +606,30 @@ fn  main(       ) -> bool{
 
     #[test]
     fn test_struct_comments() {
-        let sway_code_to_format = r#"contract;
-// This is a comment, for this one to be placed correctly we need to have Module visitor implemented
-pub struct Foo { // Here is a comment
+        let sway_code_to_format = indoc! {r"
+        contract;
+        // This is a comment, for this one to be placed correctly we need to have Module visitor implemented
+        pub struct Foo { // Here is a comment
 
 
 
-    // Trying some ASCII art
-    baz:u64,
+            // Trying some ASCII art
+            baz:u64,
 
 
 
 
-    bazzz:u64//  ________ ___  ___  _______   ___               ___       ________  ________  ________
-             // |\  _____\\  \|\  \|\  ___ \ |\  \             |\  \     |\   __  \|\   __  \|\   ____\
-             // \ \  \__/\ \  \\\  \ \   __/|\ \  \            \ \  \    \ \  \|\  \ \  \|\ /\ \  \___|_
-             //  \ \   __\\ \  \\\  \ \  \_|/_\ \  \            \ \  \    \ \   __  \ \   __  \ \_____  \
-             //   \ \  \_| \ \  \\\  \ \  \_|\ \ \  \____        \ \  \____\ \  \ \  \ \  \|\  \|____|\  \
-             //    \ \__\   \ \_______\ \_______\ \_______\       \ \_______\ \__\ \__\ \_______\____\_\  \
-             //     \|__|    \|_______|\|_______|\|_______|        \|_______|\|__|\|__|\|_______|\_________\
-             //                                                                                  \|_________|
-}
-// This is a comment
-"#;
+            bazzz:u64//  ________ ___  ___  _______   ___               ___       ________  ________  ________
+                    // |\  _____\\  \|\  \|\  ___ \ |\  \             |\  \     |\   __  \|\   __  \|\   ____\
+                    // \ \  \__/\ \  \\\  \ \   __/|\ \  \            \ \  \    \ \  \|\  \ \  \|\ /\ \  \___|_
+                    //  \ \   __\\ \  \\\  \ \  \_|/_\ \  \            \ \  \    \ \   __  \ \   __  \ \_____  \
+                    //   \ \  \_| \ \  \\\  \ \  \_|\ \ \  \____        \ \  \____\ \  \ \  \ \  \|\  \|____|\  \
+                    //    \ \__\   \ \_______\ \_______\ \_______\       \ \_______\ \__\ \__\ \_______\____\_\  \
+                    //     \|__|    \|_______|\|_______|\|_______|        \|_______|\|__|\|__|\|_______|\_________\
+                    //                                                                                  \|_________|
+        }
+        // This is a comment
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -640,20 +658,21 @@ pub struct Foo { // Here is a comment
 
     #[test]
     fn test_enum_comments() {
-        let sway_code_to_format = r#"contract;
-pub enum Bazz { // Here is a comment
-    // Trying some ASCII art
-    baz: (),
+        let sway_code_to_format = indoc! {r"
+        contract;
+        pub enum Bazz { // Here is a comment
+            // Trying some ASCII art
+            baz: (),
 
 
 
 
 
-    bazzz: (),//-----
-              //--D--
-              //-----
-}
-"#;
+            bazzz: (),//-----
+                    //--D--
+                    //-----
+        }
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -672,12 +691,13 @@ pub enum Bazz { // Here is a comment
 
     #[test]
     fn test_fn_comments() {
-        let sway_code_to_format = r#"contract;
-// This is a comment before a fn
-// This is another comment before a fn
-fn hello_world( baz: /* this is a comment */ u64) { let x = 5; // This is a comment inside the block
-}
-"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        // This is a comment before a fn
+        // This is another comment before a fn
+        fn hello_world( baz: /* this is a comment */ u64) { let x = 5; // This is a comment inside the block
+        }
+        "};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -694,14 +714,15 @@ fn hello_world( baz: /* this is a comment */ u64) { let x = 5; // This is a comm
 
     #[test]
     fn test_abi_comments() {
-        let sway_code_to_format = r#"contract;
-// This is an abi
-abi StorageMapExample {
-    // insert_into_map is blah blah
-    #[storage(write)] // this is some other comment
-    fn insert_into_map(key: u64, value: u64);
-    // this is the last comment inside the StorageMapExample
-}"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        // This is an abi
+        abi StorageMapExample {
+            // insert_into_map is blah blah
+            #[storage(write)] // this is some other comment
+            fn insert_into_map(key: u64, value: u64);
+            // this is the last comment inside the StorageMapExample
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -720,8 +741,9 @@ abi StorageMapExample {
 
     #[test]
     fn test_const_comments() {
-        let sway_code_to_format = r#"contract;
-pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next to a const"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next to a const"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -733,20 +755,21 @@ pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next 
     }
     #[test]
     fn test_storage_comments() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-struct Type1 {
-    foo: u64,
-}
-struct Type2 {
-    bar: u64,
-}
-storage {
-    // Testing a comment inside storage
-    long_var_name: Type1=Type1{ foo: 8},
-    // Testing another comment
-    var2: Type2 = Type2{bar:9} // This is the last comment
-}"#;
+        struct Type1 {
+            foo: u64,
+        }
+        struct Type2 {
+            bar: u64,
+        }
+        storage {
+            // Testing a comment inside storage
+            long_var_name: Type1=Type1{ foo: 8},
+            // Testing another comment
+            var2: Type2 = Type2{bar:9} // This is the last comment
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -771,12 +794,13 @@ storage {
 
     #[test]
     fn test_trait_comments() {
-        let sway_code_to_format = r#"contract;
-// This is the programmer trait
-trait Programmer {
-    // Returns fav languages of this Programmer.
-    fn fav_language(self) -> String;
-}"#;
+        let sway_code_to_format = indoc! {r"
+        contract;
+        // This is the programmer trait
+        trait Programmer {
+            // Returns fav languages of this Programmer.
+            fn fav_language(self) -> String;
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -793,9 +817,10 @@ trait Programmer {
 
     #[test]
     fn test_where_comment() {
-        let sway_code_to_format = r#"contract;
+        let sway_code_to_format = indoc! {r"
+        contract;
 
-pub fn hello( person: String ) -> String where /* This is next to where */ T: Eq, /*Here is a comment*/{let greeting = 42;greeting.to_string()}"#;
+        pub fn hello( person: String ) -> String where /* This is next to where */ T: Eq, /*Here is a comment*/{let greeting = 42;greeting.to_string()}"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -814,25 +839,26 @@ pub fn hello( person: String ) -> String where /* This is next to where */ T: Eq
     }
     #[test]
     fn test_impl() {
-        let sway_code_to_format = r#"script;
+        let sway_code_to_format = indoc! {r"
+        script;
 
-struct Foo {
-    bar: u64,
-    baz: bool,
-}
+        struct Foo {
+            bar: u64,
+            baz: bool,
+        }
 
-trait Qux {
-    fn is_baz_true(self) -> bool;
-}
+        trait Qux {
+            fn is_baz_true(self) -> bool;
+        }
 
-impl<A ,     B>    Qux<A, B> for
-Foo
-where
-    A    : Qux,
-    B: Qux    ,
-{fn is_baz_true(self) -> bool {
-        self.baz
-    }}"#;
+        impl<A ,     B>    Qux<A, B> for
+        Foo
+        where
+            A    : Qux,
+            B: Qux    ,
+        {fn is_baz_true(self) -> bool {
+                self.baz
+            }}"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -862,22 +888,23 @@ where
 
     #[test]
     fn test_impl_without_generics() {
-        let sway_code_to_format = r#"script;
+        let sway_code_to_format = indoc! {r"
+        script;
 
-struct Foo {
-    bar: u64,
-    baz: bool,
-}
+        struct Foo {
+            bar: u64,
+            baz: bool,
+        }
 
-trait Qux {
-    fn is_baz_true(self) -> bool;
-}
+        trait Qux {
+            fn is_baz_true(self) -> bool;
+        }
 
-impl   Qux for 
-Foo 
-{fn is_baz_true(self) -> bool {
-        self.baz
-    }}"#;
+        impl   Qux for 
+        Foo 
+        {fn is_baz_true(self) -> bool {
+                self.baz
+            }}"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
@@ -904,20 +931,21 @@ Foo
 
     #[test]
     fn test_newline_sequence_formatting() {
-        let sway_code_to_format = r#"script;
+        let sway_code_to_format = indoc! {r"
+        script;
 
-fn main() {
-    let number: u64 = 10;
+        fn main() {
+            let number: u64 = 10;
 
-    let number2: u64 = 20;
-
-
-
-    let number3: u64 = 30;
+            let number2: u64 = 20;
 
 
 
-}"#;
+            let number3: u64 = 30;
+
+
+
+        }"};
         let mut formatter = Formatter::default();
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
