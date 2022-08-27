@@ -110,7 +110,7 @@ pub const TEST: u16 = 10;
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -133,7 +133,7 @@ pub struct Foo<T, P> {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_struct() {
@@ -153,7 +153,7 @@ pub struct Foo {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -180,7 +180,7 @@ enum Color {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_enum_with_variant_alignment() {
@@ -210,7 +210,7 @@ enum Color {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_item_abi_with_generics_and_attributes() {
@@ -234,7 +234,7 @@ abi StorageMapExample {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -253,7 +253,7 @@ pub const TEST1: u16 = 10;
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_ty_formatting() {
@@ -290,7 +290,7 @@ enum TestTy {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code);
+        assert_eq!(formatted_sway_code, correct_sway_code);
     }
     #[test]
     fn test_storage_without_alignment() {
@@ -327,7 +327,7 @@ storage {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_storage_with_alignment() {
@@ -365,7 +365,7 @@ storage {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_storage_initializer() {
@@ -418,7 +418,7 @@ storage {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_item_fn() {
@@ -441,7 +441,7 @@ fn goodbye() -> usize {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_same_line_where() {
@@ -462,7 +462,7 @@ where
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_trait_and_super_trait() {
@@ -493,7 +493,7 @@ trait CompSciStudent: Programmer + Student {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_method_calls() {
@@ -588,7 +588,7 @@ fn main() -> bool {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -639,7 +639,7 @@ pub struct Foo { // Here is a comment
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -671,7 +671,7 @@ pub enum Bazz { // Here is a comment
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code);
+        assert_eq!(formatted_sway_code, correct_sway_code);
     }
 
     #[test]
@@ -694,7 +694,7 @@ fn hello_world(baz: /* this is a comment */ u64) {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code);
+        assert_eq!(formatted_sway_code, correct_sway_code);
     }
 
     #[test]
@@ -720,7 +720,7 @@ abi StorageMapExample {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code);
+        assert_eq!(formatted_sway_code, correct_sway_code);
     }
 
     #[test]
@@ -734,7 +734,7 @@ pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next 
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code);
+        assert_eq!(formatted_sway_code, correct_sway_code);
     }
     #[test]
     fn test_storage_comments() {
@@ -771,7 +771,7 @@ storage {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code);
+        assert_eq!(formatted_sway_code, correct_sway_code);
     }
 
     #[test]
@@ -794,7 +794,7 @@ trait Programmer {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -816,7 +816,7 @@ where /* This is next to where */
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
     #[test]
     fn test_impl() {
@@ -863,7 +863,7 @@ impl<A, B> Qux<A, B> for Foo where
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -905,7 +905,7 @@ impl Qux for Foo {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 
     #[test]
@@ -940,6 +940,6 @@ fn main() {
         let formatted_sway_code = formatter
             .format(Arc::from(sway_code_to_format), None)
             .unwrap();
-        assert_eq!(correct_sway_code, formatted_sway_code)
+        assert_eq!(formatted_sway_code, correct_sway_code)
     }
 }
