@@ -4,18 +4,21 @@ use sway_fmt_v2::{config::user_def::FieldAlignment, Formatter};
 
 use std::sync::Arc;
 
-fn format_with(formatter: &mut Formatter, src: &str) -> String {
-    formatter.format(Arc::from(src), None).unwrap()
+trait TestFormatter {
+    fn test_format(&mut self, src: &str) -> String;
 }
 
-fn format(src: &str) -> String {
-    let mut formatter = Formatter::default();
-    format_with(&mut formatter, src)
+impl TestFormatter for Formatter {
+    fn test_format(&mut self, src: &str) -> String {
+        self.format(Arc::from(src), None).unwrap()
+    }
 }
 
 #[test]
 fn test_const() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     pub const TEST:u16=10;
     "}), @r###"
@@ -26,10 +29,10 @@ fn test_const() {
 
 #[test]
 fn test_struct_alignment() {
-    let mut formatter = Formatter::default();
-    formatter.config.structures.field_alignment = FieldAlignment::AlignFields(40);
+    let mut fmt = Formatter::default();
+    fmt.config.structures.field_alignment = FieldAlignment::AlignFields(40);
 
-    assert_snapshot!(format_with(&mut formatter, indoc! {r"
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     pub struct Foo<T, P> {
     barbazfoo: u64,
@@ -46,7 +49,9 @@ fn test_struct_alignment() {
 
 #[test]
 fn test_struct() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     pub struct Foo {
         bar: u64,
@@ -63,7 +68,9 @@ fn test_struct() {
 
 #[test]
 fn test_enum_without_variant_alignment() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     enum Color {
@@ -87,10 +94,10 @@ fn test_enum_without_variant_alignment() {
 #[test]
 fn test_enum_with_variant_alignment() {
     // Creating a config with enum_variant_align_threshold that exceeds longest variant length
-    let mut formatter = Formatter::default();
-    formatter.config.structures.field_alignment = FieldAlignment::AlignFields(20);
+    let mut fmt = Formatter::default();
+    fmt.config.structures.field_alignment = FieldAlignment::AlignFields(20);
 
-    assert_snapshot!(format_with(&mut formatter, indoc! {r"
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     enum Color {
@@ -113,7 +120,9 @@ fn test_enum_with_variant_alignment() {
 
 #[test]
 fn test_item_abi_with_generics_and_attributes() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     abi StorageMapExample {
@@ -134,7 +143,9 @@ fn test_item_abi_with_generics_and_attributes() {
 
 #[test]
 fn test_multi_items() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     pub const TEST: u16 = 10;
@@ -148,7 +159,9 @@ fn test_multi_items() {
 
 #[test]
 fn test_ty_formatting() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     enum TestTy {
@@ -182,7 +195,9 @@ fn test_ty_formatting() {
 
 #[test]
 fn test_storage_without_alignment() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     struct Type1 {
         foo: u64,
@@ -215,10 +230,10 @@ fn test_storage_without_alignment() {
 
 #[test]
 fn test_storage_with_alignment() {
-    let mut formatter = Formatter::default();
-    formatter.config.structures.field_alignment = FieldAlignment::AlignFields(50);
+    let mut fmt = Formatter::default();
+    fmt.config.structures.field_alignment = FieldAlignment::AlignFields(50);
 
-    assert_snapshot!(format_with(&mut formatter, indoc! {r"
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     struct Type1 {
         foo: u64,
@@ -251,7 +266,9 @@ fn test_storage_with_alignment() {
 
 #[test]
 fn test_storage_initializer() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     struct Type1 {
@@ -301,7 +318,9 @@ fn test_storage_initializer() {
 
 #[test]
 fn test_item_fn() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     pub fn hello( person: String ) -> String {let greeting = 42;greeting.to_string()}
@@ -321,7 +340,9 @@ fn test_item_fn() {
 
 #[test]
 fn test_same_line_where() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     pub fn hello( person: String ) -> String where T: Eq,{let greeting = 42;greeting.to_string()}"}), @r###"
@@ -339,7 +360,9 @@ fn test_same_line_where() {
 
 #[test]
 fn test_trait_and_super_trait() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     library traits;
 
     trait Person{ fn name( self )->String;fn age( self )->usize; }
@@ -367,11 +390,11 @@ fn test_trait_and_super_trait() {
 
 #[test]
 fn test_method_calls() {
-    let mut formatter = Formatter::default();
-    formatter.config.structures.small_structures_single_line = true;
-    formatter.config.whitespace.max_width = 220;
+    let mut fmt = Formatter::default();
+    fmt.config.structures.small_structures_single_line = true;
+    fmt.config.whitespace.max_width = 220;
 
-    assert_snapshot!(format_with(&mut formatter, indoc! {r"
+    assert_snapshot!(fmt.test_format(indoc! {r"
     script;
 
     struct Opts {
@@ -460,7 +483,9 @@ fn test_method_calls() {
 
 #[test]
 fn test_struct_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     // This is a comment, for this one to be placed correctly we need to have Module visitor implemented
     pub struct Foo { // Here is a comment
@@ -507,7 +532,9 @@ fn test_struct_comments() {
 
 #[test]
 fn test_enum_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     pub enum Bazz { // Here is a comment
         // Trying some ASCII art
@@ -535,7 +562,9 @@ fn test_enum_comments() {
 
 #[test]
 fn test_fn_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     // This is a comment before a fn
     // This is another comment before a fn
@@ -553,7 +582,9 @@ fn test_fn_comments() {
 
 #[test]
 fn test_abi_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     // This is an abi
     abi StorageMapExample {
@@ -575,7 +606,9 @@ fn test_abi_comments() {
 
 #[test]
 fn test_const_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     pub const /* TEST: blah blah tests */ TEST: u16 = 10; // This is a comment next to a const"}), @r###"
     contract;
@@ -584,7 +617,9 @@ fn test_const_comments() {
 }
 #[test]
 fn test_storage_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     struct Type1 {
@@ -618,7 +653,9 @@ fn test_storage_comments() {
 
 #[test]
 fn test_trait_comments() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
     // This is the programmer trait
     trait Programmer {
@@ -636,7 +673,9 @@ fn test_trait_comments() {
 
 #[test]
 fn test_where_comment() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     contract;
 
     pub fn hello( person: String ) -> String where /* This is next to where */ T: Eq, /*Here is a comment*/{let greeting = 42;greeting.to_string()}"}), @r###"
@@ -654,7 +693,9 @@ fn test_where_comment() {
 
 #[test]
 fn test_impl() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     script;
 
     struct Foo {
@@ -698,7 +739,9 @@ fn test_impl() {
 
 #[test]
 fn test_impl_without_generics() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     script;
 
     struct Foo {
@@ -736,7 +779,9 @@ fn test_impl_without_generics() {
 
 #[test]
 fn test_newline_sequence_formatting() {
-    assert_snapshot!(format(indoc! {r"
+    let mut fmt = Formatter::default();
+
+    assert_snapshot!(fmt.test_format(indoc! {r"
     script;
 
     fn main() {
