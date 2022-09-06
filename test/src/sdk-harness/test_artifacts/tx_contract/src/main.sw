@@ -25,8 +25,9 @@ use std::{
     },
     outputs::{
         Output,
-        output_count,
         output_amount,
+        output_count,
+        output_message_recipient,
         output_pointer,
         output_type,
     },
@@ -87,6 +88,7 @@ abi TxContractTest {
     fn get_tx_output_pointer(index: u64) -> u64;
     fn get_tx_output_type(ptr: u64) -> Output;
     fn get_tx_output_amount(index: u64) -> u64;
+    fn get_tx_output_message_recipient(index: u64) -> u64;
 }
 
 impl TxContractTest for Contract {
@@ -209,4 +211,8 @@ impl TxContractTest for Contract {
     fn get_tx_output_amount(index: u64) -> u64 {
         output_amount(index)
     }
+    fn get_output_message_recipient(index: u64) -> u64 {
+        output_amount(index)
+    }
+
 }
