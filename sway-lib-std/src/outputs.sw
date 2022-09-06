@@ -2,6 +2,7 @@
 //! This includes OutputCoins, InputMessages and InputContracts.
 library outputs;
 
+use ::address::Address;
 use ::contract_id::ContractId;
 use ::mem::read;
 use ::revert::revert;

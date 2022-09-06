@@ -70,10 +70,10 @@ abi TxContractTest {
     fn get_tx_id() -> b256;
 
     fn get_input_type(index: u64) -> Input;
-    fn get_tx_input_pointer(index: u64) -> u64;
-    fn get_tx_input_coin_owner(index: u64) -> Address;
-    fn get_tx_input_amount(index: u64) -> u64;
-    fn get_tx_input_predicate_data_pointer(index: u64) -> u64;
+    fn get_input_pointer(index: u64) -> u64;
+    fn get_input_coin_owner(index: u64) -> Address;
+    fn get_input_amount(index: u64) -> u64;
+    fn get_input_predicate_data_pointer(index: u64) -> u64;
     fn get_input_message_msg_id(index: u64) -> b256;
     fn get_input_message_sender(index: u64) -> Address;
     fn get_input_message_recipient(index: u64) -> Address;
@@ -85,10 +85,10 @@ abi TxContractTest {
     fn get_input_message_data(index: u64, offset: u64) -> u64;
     fn get_input_message_predicate(index: u64) -> u64;
 
-    fn get_tx_output_pointer(index: u64) -> u64;
-    fn get_tx_output_type(ptr: u64) -> Output;
-    fn get_tx_output_amount(index: u64) -> u64;
-    fn get_tx_output_message_recipient(index: u64) -> u64;
+    fn get_output_pointer(index: u64) -> u64;
+    fn get_output_type(ptr: u64) -> Output;
+    fn get_output_amount(index: u64) -> u64;
+    fn get_output_message_recipient(index: u64) -> u64;
 }
 
 impl TxContractTest for Contract {
@@ -140,16 +140,16 @@ impl TxContractTest for Contract {
     fn get_tx_id() -> b256 {
         tx_id()
     }
-    fn get_tx_input_pointer(index: u64) -> u64 {
+    fn get_input_pointer(index: u64) -> u64 {
         input_pointer(index)
     }
     fn get_input_type(index: u64) -> Input {
         input_type(index)
     }
-    fn get_tx_input_coin_owner(index: u64) -> Address {
+    fn get_input_coin_owner(index: u64) -> Address {
         input_coin_owner(index).unwrap()
     }
-    fn get_tx_input_amount(index: u64) -> u64 {
+    fn get_input_amount(index: u64) -> u64 {
         let opt = input_amount(index);
         if let Option::Some(v) = opt {
             v
@@ -157,7 +157,7 @@ impl TxContractTest for Contract {
             99
         }
     }
-    fn get_tx_input_predicate_data_pointer(index: u64) -> u64 {
+    fn get_input_predicate_data_pointer(index: u64) -> u64 {
         let opt = input_predicate_data_pointer(index);
         match opt {
             Option::Some(v) => {
@@ -202,13 +202,13 @@ impl TxContractTest for Contract {
     }
 
 
-    fn get_tx_output_pointer(index: u64) -> u64 {
+    fn get_output_pointer(index: u64) -> u64 {
         output_pointer(index)
     }
-    fn get_tx_output_type(ptr: u64) -> Output {
+    fn get_output_type(ptr: u64) -> Output {
         output_type(ptr)
     }
-    fn get_tx_output_amount(index: u64) -> u64 {
+    fn get_output_amount(index: u64) -> u64 {
         output_amount(index)
     }
     fn get_output_message_recipient(index: u64) -> u64 {
