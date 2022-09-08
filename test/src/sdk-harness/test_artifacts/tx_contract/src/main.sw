@@ -88,7 +88,7 @@ abi TxContractTest {
     fn get_output_pointer(index: u64) -> u64;
     fn get_output_type(ptr: u64) -> Output;
     fn get_output_amount(index: u64) -> u64;
-    fn get_output_message_recipient(index: u64) -> u64;
+    fn get_output_message_recipient(index: u64) -> Address;
 }
 
 impl TxContractTest for Contract {
@@ -211,8 +211,8 @@ impl TxContractTest for Contract {
     fn get_output_amount(index: u64) -> u64 {
         output_amount(index)
     }
-    fn get_output_message_recipient(index: u64) -> u64 {
-        output_amount(index)
+    fn get_output_message_recipient(index: u64) -> Address {
+        output_message_recipient(index)
     }
 
 }

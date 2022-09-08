@@ -285,6 +285,19 @@ async fn can_get_output_amount() {
     let (contract_instance, _, _) = get_contracts().await;
     let result = contract_instance.get_output_amount(1).call().await.unwrap();
     assert_eq!(result.value, 0);
+    let result = contract_instance.get_output_amount(1).call().await.unwrap();
+    assert_eq!(result.value, 0);
+}
+
+#[tokio::test]
+async fn can_get_output_message_recipient() {
+    let (contract_instance, _, wallet) = get_contracts().await;
+    let result = contract_instance
+        .get_output_message_recipient(0)
+        .call()
+        .await
+        .unwrap();
+    assert_eq!(result.value, wallet.address().into())
 }
 
 #[tokio::test]
