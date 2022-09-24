@@ -1,4 +1,4 @@
-library iterator;
+library iter;
 
 pub trait Iterator {
     type Item;

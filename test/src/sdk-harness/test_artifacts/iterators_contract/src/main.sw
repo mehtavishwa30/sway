@@ -1,6 +1,6 @@
 contract;
 
-use std::iterator::Iterator;
+use std::iter::Iterator;
 
 struct MyVec {
     counter: u64,
