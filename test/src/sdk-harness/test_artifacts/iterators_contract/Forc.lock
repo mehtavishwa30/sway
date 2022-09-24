@@ -1,0 +1,14 @@
+[[package]]
+name = 'core'
+source = 'path+from-root-8F1DD87A99A2D881'
+dependencies = []
+
+[[package]]
+name = 'iterators_contract'
+source = 'root'
+dependencies = ['std']
+
+[[package]]
+name = 'std'
+source = 'path+from-root-8F1DD87A99A2D881'
+dependencies = ['core']
