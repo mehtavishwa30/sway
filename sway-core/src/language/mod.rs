@@ -6,6 +6,7 @@ mod module;
 pub mod parsed;
 mod purity;
 pub mod ty;
+pub mod typed;
 mod visibility;
 
 pub use asm::*;
