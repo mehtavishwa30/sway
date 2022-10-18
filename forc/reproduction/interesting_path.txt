@@ -1,0 +1,2 @@
+sa ovim je palo:
+/home/segfault_magnet/.forc/git/checkouts/std-57e47d01450577b4/dfa6224932a97c514b707dcfc300715b2a0895dc/test/src/e2e_vm_tests/test_programs/should_fail/config_time_constants/
