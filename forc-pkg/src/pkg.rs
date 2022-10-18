@@ -1065,6 +1065,7 @@ fn fetch_graph(
     // Traverse the rest of the graph from the root.
     let fetch_ts = std::time::Instant::now();
     let fetch_id = fetch_id(proj_manifest.dir(), fetch_ts);
+    dbg!(&fetch_id);
     let path_root = graph[proj_node].id();
     let mut fetched = graph
         .node_indices()
@@ -1242,6 +1243,7 @@ where
 {
     // Clear existing temporary directory if it exists.
     let repo_dir = tmp_git_repo_dir(fetch_id, name, &source.repo);
+
     if repo_dir.exists() {
         let _ = std::fs::remove_dir_all(&repo_dir);
     }
@@ -1442,9 +1444,17 @@ pub fn fetch_git(fetch_id: u64, name: &str, pinned: &SourceGitPinned) -> Result<
         // Change HEAD to point to the pinned commit.
         let id = git2::Oid::from_str(&pinned.commit_hash)?;
         repo.set_head_detached(id)?;
-        if path.exists() {
-            let _ = std::fs::remove_dir_all(&path);
-        }
+        //TODO: check how cargo does it :)
+        //TODO: the problem arises when the dep is not present. All the proccesses start downloading the dependency and a part of that process is the line below (deleting the content). Keep the lock undil the move is done (the final destination could be somewhere). So no create but use move
+        //TODO: if the folder exists and is not locked we assume that the content is valid.
+        //TODO: else wait somehow and check again ^
+        //TODO: else you must download it
+        //TODO: if anything fails try to cleanup
+        //TODO: if cleanup fails we should do checksums... Error: Corrupted please run forc --pruge
+
+        // if path.exists() {
+        //     let _ = std::fs::remove_dir_all(&path);
+        // }
         std::fs::create_dir_all(&path)?;
 
         // Checkout HEAD to the target directory.
