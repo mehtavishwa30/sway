@@ -1,6 +1,49 @@
 #![allow(dead_code)]
-use crate::core::token::{AstToken, Token};
-use sway_core::{language::parsed::Declaration, transform};
+use crate::core::token::{AstToken, Token, TypedAstToken};
+use sway_core::{
+    declaration_engine,
+    language::{parsed::Declaration, ty},
+    transform,
+};
+use sway_types::Spanned;
+
+pub(crate) fn attributes_map2(token: &Token) -> Option<transform::AttributesMap> {
+    match &token.typed.as_ref()? {
+        TypedAstToken::TypedDeclaration(decl) => match decl {
+            ty::TyDeclaration::EnumDeclaration(decl_id) => Some(
+                declaration_engine::de_get_enum(decl_id.clone(), &decl.span())
+                    .ok()?
+                    .attributes,
+            ),
+            ty::TyDeclaration::FunctionDeclaration(decl_id) => Some(
+                declaration_engine::de_get_function(decl_id.clone(), &decl.span())
+                    .ok()?
+                    .attributes,
+            ),
+            ty::TyDeclaration::StructDeclaration(decl_id) => Some(
+                declaration_engine::de_get_struct(decl_id.clone(), &decl.span())
+                    .ok()?
+                    .attributes,
+            ),
+            ty::TyDeclaration::ConstantDeclaration(decl_id) => Some(
+                declaration_engine::de_get_constant(decl_id.clone(), &decl.span())
+                    .ok()?
+                    .attributes,
+            ),
+            ty::TyDeclaration::StorageDeclaration(decl_id) => Some(
+                declaration_engine::de_get_storage(decl_id.clone(), &decl.span())
+                    .ok()?
+                    .attributes,
+            ),
+            _ => None,
+        },
+        TypedAstToken::TypedStorageField(field) => Some(field.attributes.clone()),
+        TypedAstToken::TypedStructField(field) => Some(field.attributes.clone()),
+        TypedAstToken::TypedTraitFn(trait_fn) => Some(trait_fn.attributes.clone()),
+        TypedAstToken::TypedEnumVariant(variant) => Some(variant.attributes.clone()),
+        _ => None,
+    }
+}
 
 pub(crate) fn attributes_map(token: &Token) -> Option<&transform::AttributesMap> {
     match &token.parsed {
