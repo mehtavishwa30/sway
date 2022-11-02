@@ -275,21 +275,14 @@ impl core::ops::Divide for U128 {
         assert(divisor != zero);
 
         let mut quotient = U128::new();
-        let mut remainder = U128::new();
+        let mut temp = U128::new();
         let mut i = 128 - 1;
-        while true {
-            quotient <<= 1;
-            remainder <<= 1;
-            remainder = remainder | ((self & (one << i)) >> i);
-            // TODO use >= once OrdEq can be implemented.
-            if remainder > divisor || remainder == divisor {
-                remainder -= divisor;
-                quotient = quotient | one;
-            }
-
-            if i == 0 {
-                break;
-            }
+        while i > 0 {
+            let v = temp + (divisor << i);
+            if  v < self || v == self {
+                temp += divisor << i;
+                quotient = quotient | (one << i);
+            } 
 
             i -= 1;
         }
@@ -334,16 +327,15 @@ impl Root for U128 {
     /// Newton's method as in https://en.wikipedia.org/wiki/Integer_square_root#Algorithm_using_Newton's_method
     fn sqrt(self) -> Self {
         let zero = U128::from((0, 0));
-        let two = U128::from((0, 2));
-        let mut x0 = self / two;
+        let mut x0 = self >> 1;
         let mut s = self;
 
         if x0 != zero {
-            let mut x1 = (x0 + s / x0) / two;
+            let mut x1 = (x0 + s / x0) >> 1;
 
             while x1 < x0 {
                 x0 = x1;
-                x1 = (x0 + self / x0) / two;
+                x1 = (x0 + self / x0) >> 1;
             }
 
             return x0;
