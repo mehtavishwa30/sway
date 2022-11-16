@@ -104,6 +104,14 @@ fn capabilities() -> ServerCapabilities {
         document_formatting_provider: Some(OneOf::Left(true)),
         definition_provider: Some(OneOf::Left(true)),
         inlay_hint_provider: Some(OneOf::Left(true)),
+        code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+        // code_action_provider: Some(CodeActionProviderCapability::Options(CodeActionOptions {
+        //     code_action_kinds: Some(vec![CodeActionKind::REFACTOR]),
+        //     resolve_provider: None,
+        //     work_done_progress_options: WorkDoneProgressOptions {
+        //         work_done_progress: None,
+        //     },
+        // })),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         ..ServerCapabilities::default()
     }
@@ -297,6 +305,23 @@ impl LanguageServer for Backend {
                 let position = params.text_document_position_params.position;
                 Ok(capabilities::hover::hover_data(session, uri, position))
             }
+            Err(err) => {
+                tracing::error!("{}", err.to_string());
+                Ok(None)
+            }
+        }
+    }
+
+    async fn code_action(
+        &self,
+        params: CodeActionParams,
+    ) -> jsonrpc::Result<Option<CodeActionResponse>> {
+        match self.get_uri_and_session(&params.text_document.uri) {
+            Ok((_, session)) => Ok(capabilities::code_actions::code_actions(
+                session,
+                &params.range,
+                params.text_document,
+            )),
             Err(err) => {
                 tracing::error!("{}", err.to_string());
                 Ok(None)
