@@ -91,12 +91,21 @@ impl Session {
     /// Check if the code editor's cursor is currently over one of our collected tokens.
     pub fn token_at_position(&self, uri: &Url, position: Position) -> Option<(Ident, Token)> {
         let tokens = self.tokens_for_file(uri);
+        eprintln!("position?! {:?}", position.clone());
         match utils::common::ident_at_position(position, tokens) {
-            Some(ident) => self.token_map.get(&to_ident_key(&ident)).map(|item| {
-                let ((ident, _), token) = item.pair();
-                (ident.clone(), token.clone())
-            }),
-            None => None,
+            Some(ident) => {
+                let ident_key = to_ident_key(&ident);
+                eprintln!("ident_key \n\n\n{:?}", ident_key.clone());
+                eprintln!("uri {:?}", uri);
+                self.token_map.get(&ident_key).map(|item| {
+                    let ((ident, _), token) = item.pair();
+                    (ident.clone(), token.clone())
+                })
+            }
+            None => {
+                eprintln!("None :(");
+                None
+            }
         }
     }
 

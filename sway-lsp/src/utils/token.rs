@@ -1,4 +1,4 @@
-use crate::core::token::{AstToken, SymbolKind, Token, TokenMap, TypedAstToken};
+use crate::core::token::{AstToken, SymbolKind, Token, TokenMap, TypeDefinition, TypedAstToken};
 use sway_core::{
     declaration_engine,
     language::ty,
@@ -66,6 +66,28 @@ pub(crate) fn struct_declaration_of_type_id(
             declaration_engine::de_get_struct(decl_id.clone(), &decl_id.span()).ok()
         }
         _ => None,
+    })
+}
+
+/// Returns the TyAbiDeclaration associated with the TypeId if it
+/// exists within the TokenMap.
+pub(crate) fn abi_declaration_of_type_id(
+    type_id: &TypeId,
+    tokens: &TokenMap,
+) -> Option<ty::TyAbiDeclaration> {
+    declaration_of_type_id(type_id, tokens).and_then(|decl| match decl {
+        ty::TyDeclaration::AbiDeclaration(ref decl_id) => {
+            declaration_engine::de_get_abi(decl_id.clone(), &decl_id.span()).ok()
+        }
+        _ => None,
+    })
+}
+
+/// Returns the type ID of a token or None.
+pub(crate) fn type_id_of_token(token: Token) -> Option<TypeId> {
+    token.type_def.and_then(|type_def| match type_def {
+        TypeDefinition::TypeId(type_id) => Some(type_id),
+        TypeDefinition::Ident(_) => None,
     })
 }
 

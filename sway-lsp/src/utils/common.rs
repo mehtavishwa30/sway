@@ -9,7 +9,10 @@ where
     I: Iterator<Item = (Ident, Token)>,
 {
     for (ident, _) in tokens {
+        eprintln!("identt {:?}", ident.clone());
         let range = get_range_from_span(&ident.span());
+        eprintln!("range.startt {:?}", range.start.clone());
+        eprintln!("range.endd {:?}", range.end.clone());
         if cursor_position >= range.start && cursor_position <= range.end {
             return Some(ident);
         }

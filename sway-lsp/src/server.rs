@@ -13,11 +13,13 @@ use forc_pkg::manifest::PackageManifestFile;
 use forc_tracing::{init_tracing_subscriber, TracingSubscriberOptions, TracingWriterMode};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+// use serde_json::Value;
 use std::{
     fs::File,
     io::Write,
     ops::Deref,
     path::{Path, PathBuf},
+    // str::FromStr,
     sync::Arc,
 };
 use sway_types::Spanned;
@@ -105,6 +107,14 @@ fn capabilities() -> ServerCapabilities {
         definition_provider: Some(OneOf::Left(true)),
         inlay_hint_provider: Some(OneOf::Left(true)),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+
+        // code_action_provider: Some(CodeActionProviderCapability::Options(CodeActionOptions {
+        //     resolve_provider: Some(true),
+        //     code_action_kinds: None,
+        //     work_done_progress_options: WorkDoneProgressOptions {
+        //         work_done_progress: None,
+        //     },
+        // })),
         // code_action_provider: Some(CodeActionProviderCapability::Options(CodeActionOptions {
         //     code_action_kinds: Some(vec![CodeActionKind::REFACTOR]),
         //     resolve_provider: None,
@@ -317,10 +327,11 @@ impl LanguageServer for Backend {
         params: CodeActionParams,
     ) -> jsonrpc::Result<Option<CodeActionResponse>> {
         match self.get_uri_and_session(&params.text_document.uri) {
-            Ok((_, session)) => Ok(capabilities::code_actions::code_actions(
+            Ok((temp_uri, session)) => Ok(capabilities::code_actions::code_actions(
                 session,
                 &params.range,
                 params.text_document,
+                &temp_uri,
             )),
             Err(err) => {
                 tracing::error!("{}", err.to_string());
@@ -328,6 +339,32 @@ impl LanguageServer for Backend {
             }
         }
     }
+
+    // async fn code_action_resolve(&self, code_action: CodeAction) -> jsonrpc::Result<CodeAction> {
+    //     eprintln!("\n\n\nRESOLVE IT");
+    //     eprintln!("{:?}", code_action);
+
+    //     let mut found_session = false;
+    //     if let Some(Value::String(uri_raw)) = &code_action.data {
+    //         if let Ok(uri) = Url::from_str(&uri_raw) {
+    //             match self.get_uri_and_session(&uri) {
+    //                 Ok((_, session)) => {
+    //                     // TODO
+    //                     // here we would also need to provide a list of builtin methods not just the ones from the document
+    //                     eprintln!("\n\n\nGot here {:?}", session);
+    //                     found_session = true;
+    //                 }
+    //                 Err(err) => {
+    //                     tracing::error!("{}", err.to_string());
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     if !found_session {
+    //         tracing::error!("Missing session URI");
+    //     };
+    //     Ok(code_action)
+    // }
 
     async fn completion(
         &self,
