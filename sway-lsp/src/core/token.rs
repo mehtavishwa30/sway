@@ -89,5 +89,6 @@ pub enum SymbolKind {
     BuiltinType,
     Module,
     TypeParameter,
+    Abi,
     Unknown,
 }

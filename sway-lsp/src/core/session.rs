@@ -23,6 +23,7 @@ use sway_core::{
         parsed::{AstNode, ParseProgram},
         ty,
     },
+    semantic_analysis::declaration,
     CompileResult,
 };
 use sway_types::{Ident, Span, Spanned};
@@ -130,7 +131,7 @@ impl Session {
             })
     }
 
-    /// Return a TokenMap with tokens belonging to the provided file path
+    /// Return an iterator of tokens belonging to the provided file path
     pub fn tokens_for_file<'s>(
         &'s self,
         uri: &'s Url,
@@ -139,6 +140,27 @@ impl Session {
             .iter()
             .filter(|item| {
                 let (_, span) = item.key();
+                match span.path() {
+                    Some(path) => path.to_str() == Some(uri.path()),
+                    None => false,
+                }
+            })
+            .map(|item| {
+                let ((ident, _), token) = item.pair();
+                (ident.clone(), token.clone())
+            })
+    }
+
+    /// Return an iterator of AST tokens belonging to the provided file path
+    pub fn ast_tokens_for_file<'s>(
+        &'s self,
+        uri: &'s Url,
+    ) -> impl 's + Iterator<Item = (Ident, Token)> {
+        self.token_map
+            .iter()
+            .filter(|item| {
+                let (_, span) = item.key();
+                let ast_token = item.value().parsed;
                 match span.path() {
                     Some(path) => path.to_str() == Some(uri.path()),
                     None => false,

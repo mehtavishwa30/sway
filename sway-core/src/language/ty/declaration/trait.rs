@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use sway_types::{Ident, Span};
+use sway_types::{Ident, Span, Spanned};
 
 use crate::{
     declaration_engine::DeclarationId,
@@ -62,5 +62,11 @@ impl MonomorphizeHelper for TyTraitDeclaration {
 
     fn type_parameters(&self) -> &[TypeParameter] {
         &self.type_parameters
+    }
+}
+
+impl Spanned for TyTraitDeclaration {
+    fn span(&self) -> Span {
+        self.span.clone()
     }
 }

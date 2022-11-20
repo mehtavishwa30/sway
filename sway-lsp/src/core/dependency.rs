@@ -25,6 +25,7 @@ pub fn collect_parsed_declaration(node: &AstNode, tokens: &TokenMap) {
             Declaration::FunctionDeclaration(decl) => (decl.name.clone(), SymbolKind::Function),
             Declaration::ConstantDeclaration(decl) => (decl.name.clone(), SymbolKind::Const),
             Declaration::EnumDeclaration(decl) => (decl.name.clone(), SymbolKind::Enum),
+            Declaration::AbiDeclaration(decl) => (decl.name.clone(), SymbolKind::Abi),
             _ => return,
         };
 

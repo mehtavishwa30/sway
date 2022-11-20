@@ -1,4 +1,4 @@
-use sway_types::Span;
+use sway_types::{Span, Spanned};
 
 use crate::{declaration_engine::DeclarationId, language::CallPath, type_system::*};
 
@@ -34,5 +34,11 @@ impl ReplaceSelfType for TyImplTrait {
         self.methods
             .iter_mut()
             .for_each(|x| x.replace_self_type(self_type));
+    }
+}
+
+impl Spanned for TyImplTrait {
+    fn span(&self) -> Span {
+        self.span.clone()
     }
 }

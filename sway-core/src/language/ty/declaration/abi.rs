@@ -1,5 +1,5 @@
 use derivative::Derivative;
-use sway_types::{Ident, Span};
+use sway_types::{Ident, Span, Spanned};
 
 use crate::{declaration_engine::DeclarationId, transform, type_system::*};
 
@@ -25,5 +25,11 @@ impl CreateTypeId for TyAbiDeclaration {
             address: None,
         };
         insert_type(ty)
+    }
+}
+
+impl Spanned for TyAbiDeclaration {
+    fn span(&self) -> Span {
+        self.span.clone()
     }
 }

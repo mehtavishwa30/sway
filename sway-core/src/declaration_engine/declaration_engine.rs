@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use sway_error::error::CompileError;
 use sway_types::{Span, Spanned};
 
-use crate::{concurrent_slab::ConcurrentSlab, language::ty};
+use crate::{concurrent_slab::ConcurrentSlab, language::ty, TypeId};
 
 use super::{declaration_id::DeclarationId, declaration_wrapper::DeclarationWrapper};
 
@@ -204,6 +204,10 @@ impl DeclarationEngine {
     ) -> Result<ty::TyEnumDeclaration, CompileError> {
         self.slab.get(*index).expect_enum(span)
     }
+
+    fn get_generic_declaration(&self, index: usize) -> Result<DeclarationWrapper, CompileError> {
+        Ok(self.slab.get(index))
+    }
 }
 
 #[allow(dead_code)]
@@ -326,4 +330,8 @@ pub fn de_get_enum(
     span: &Span,
 ) -> Result<ty::TyEnumDeclaration, CompileError> {
     DECLARATION_ENGINE.get_enum(index, span)
+}
+
+pub fn de_get_generic_declaration(index: usize) -> Result<DeclarationWrapper, CompileError> {
+    DECLARATION_ENGINE.get_generic_declaration(index)
 }

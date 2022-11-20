@@ -1,4 +1,4 @@
-use sway_types::{Ident, Span};
+use sway_types::{Ident, Span, Spanned};
 
 use crate::{
     language::{ty::*, Visibility},
@@ -12,4 +12,10 @@ pub struct TyConstantDeclaration {
     pub visibility: Visibility,
     pub attributes: transform::AttributesMap,
     pub span: Span,
+}
+
+impl Spanned for TyConstantDeclaration {
+    fn span(&self) -> Span {
+        self.span.clone()
+    }
 }

@@ -1,7 +1,7 @@
 use std::fmt;
 
 use sway_error::error::CompileError;
-use sway_types::Span;
+use sway_types::{Span, Spanned};
 
 use crate::{
     language::ty,
@@ -117,6 +117,22 @@ impl DeclarationWrapper {
             DeclarationWrapper::Abi(_) => "abi",
             DeclarationWrapper::Constant(_) => "constant",
             DeclarationWrapper::Enum(_) => "enum",
+        }
+    }
+
+    /// gets the span for a declaration
+    fn span(&self) -> Option<&Span> {
+        match self {
+            DeclarationWrapper::Unknown => None,
+            DeclarationWrapper::Function(decl) => Some(&decl.span()),
+            DeclarationWrapper::Trait(decl) => Some(&decl.span()),
+            DeclarationWrapper::Struct(decl) => Some(&decl.span()),
+            DeclarationWrapper::ImplTrait(decl) => Some(&decl.span()),
+            DeclarationWrapper::TraitFn(decl) => Some(&decl.span()),
+            DeclarationWrapper::Storage(decl) => Some(&decl.span()),
+            DeclarationWrapper::Abi(decl) => Some(&decl.span()),
+            DeclarationWrapper::Constant(decl) => Some(&decl.span()),
+            DeclarationWrapper::Enum(decl) => decl.span(),
         }
     }
 
