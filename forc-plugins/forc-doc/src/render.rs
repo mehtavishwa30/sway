@@ -172,6 +172,9 @@ fn html_head(location: String, decl_ty: String, decl_name: String) -> Box<dyn Re
             );
             meta(name="keywords", content=format!("sway, swaylang, sway-lang, {decl_name}"));
             title: format!("{decl_name} in {location} - Sway");
+            link(rel="stylesheet", href="../ayu.css");
+            script(src="../sway.js");
+            script { : "hljs.highlightAll();" }
             // TODO: Add links for CSS & Fonts
         }
     }
@@ -200,7 +203,9 @@ fn html_body(
             // this is the main code block
             div(class="docblock item-decl") {
                 pre(class=format!("sway {decl_ty}")) {
-                    code { : code_span; }
+                    code(class="language-sway") {
+                        : code_span;
+                    }
                 }
             }
             // expand or hide description of main code block
