@@ -162,13 +162,10 @@ mod ir_builder {
                 / op_cmp()
                 / op_const()
                 / op_contract_call()
-                / op_extract_element()
-                / op_extract_value()
+                / op_get_element_ptr()
                 / op_get_storage_key()
                 / op_get_ptr()
                 / op_gtf()
-                / op_insert_element()
-                / op_insert_value()
                 / op_int_to_ptr()
                 / op_load()
                 / op_log()
@@ -245,14 +242,9 @@ mod ir_builder {
                     IrAstOperation::ContractCall(ty, name, params, coins, asset_id, gas)
             }
 
-            rule op_extract_element() -> IrAstOperation
-                = "extract_element" _ name:id() comma() ty:ast_ty() comma() idx:id() {
-                    IrAstOperation::ExtractElement(name, ty, idx)
-                }
-
-            rule op_extract_value() -> IrAstOperation
-                = "extract_value" _ name:id() comma() ty:ast_ty() comma() idcs:(decimal() ++ comma()) {
-                    IrAstOperation::ExtractValue(name, ty, idcs)
+            rule op_get_element_ptr() -> IrAstOperation
+                = "get_element_ptr" _ name:id() comma() ty:ast_ty() comma() idcs:(id() ++ comma()) {
+                    IrAstOperation::GetElementPtr(name, ty, idcs)
                 }
 
             rule op_get_storage_key() -> IrAstOperation
@@ -269,16 +261,6 @@ mod ir_builder {
             rule op_gtf() -> IrAstOperation
                 = "gtf" _ index:id() comma() tx_field_id:decimal()  {
                     IrAstOperation::Gtf(index, tx_field_id)
-                }
-
-            rule op_insert_element() -> IrAstOperation
-                = "insert_element" _ name:id() comma() ty:ast_ty() comma() val:id() comma() idx:id() {
-                    IrAstOperation::InsertElement(name, ty, val, idx)
-                }
-
-            rule op_insert_value() -> IrAstOperation
-                = "insert_value" _ aval:id() comma() ty:ast_ty() comma() ival:id() comma() idcs:(decimal() ++ comma()) {
-                    IrAstOperation::InsertValue(aval, ty, ival, idcs)
                 }
 
             rule op_int_to_ptr() -> IrAstOperation
@@ -471,7 +453,7 @@ mod ir_builder {
                 / array_ty()
                 / struct_ty()
                 / union_ty()
-                / mp:mut_ptr() ty:ast_ty() { IrAstTy::Pointer(Box::new(ty), mp) }
+                / mp:mut_ptr() ty:ast_ty() { IrAstTy::Pointer(Box::new(ty)) }
 
             rule array_ty() -> IrAstTy
                 = "[" _ ty:ast_ty() ";" _ c:decimal() "]" _ {
@@ -600,7 +582,7 @@ mod ir_builder {
         error::IrError,
         function::Function,
         instruction::{Instruction, Predicate, Register},
-        irtype::{Aggregate, Type},
+        irtype::Type,
         metadata::{MetadataIndex, Metadatum},
         module::{Kind, Module},
         pointer::Pointer,
@@ -659,13 +641,10 @@ mod ir_builder {
         Cmp(String, String, String),
         Const(IrAstTy, IrAstConst),
         ContractCall(IrAstTy, String, String, String, String, String),
-        ExtractElement(String, IrAstTy, String),
-        ExtractValue(String, IrAstTy, Vec<u64>),
         GetStorageKey(),
         GetPtr(String, IrAstTy, u64),
         Gtf(String, u64),
-        InsertElement(String, IrAstTy, String, String),
-        InsertValue(String, IrAstTy, String, Vec<u64>),
+        GetElementPtr(String, IrAstTy, Vec<String>),
         IntToPtr(String, IrAstTy),
         Load(String),
         Log(IrAstTy, String, String),
@@ -776,36 +755,36 @@ mod ir_builder {
         Array(Box<IrAstTy>, u64),
         Union(Vec<IrAstTy>),
         Struct(Vec<IrAstTy>),
-        Pointer(Box<IrAstTy>, bool),
+        Pointer(Box<IrAstTy>),
     }
 
     impl IrAstTy {
         fn to_ir_type(&self, context: &mut Context) -> Type {
             match self {
-                IrAstTy::Unit => Type::Unit,
-                IrAstTy::Bool => Type::Bool,
-                IrAstTy::U64 => Type::Uint(64),
-                IrAstTy::B256 => Type::B256,
-                IrAstTy::String(n) => Type::String(*n),
-                IrAstTy::Array(..) => Type::Array(self.to_ir_aggregate_type(context)),
-                IrAstTy::Union(_) => Type::Union(self.to_ir_aggregate_type(context)),
-                IrAstTy::Struct(_) => Type::Struct(self.to_ir_aggregate_type(context)),
-                IrAstTy::Pointer(ty, is_mut) => {
+                IrAstTy::Unit => Type::get_unit(context),
+                IrAstTy::Bool => Type::get_bool(context),
+                IrAstTy::U64 => Type::get_uint(context, 64),
+                IrAstTy::B256 => Type::get_b256(context),
+                IrAstTy::String(n) => Type::get_string(context, *n),
+                IrAstTy::Array(..) => self.to_ir_aggregate_type(context),
+                IrAstTy::Union(_) => self.to_ir_aggregate_type(context),
+                IrAstTy::Struct(_) => self.to_ir_aggregate_type(context),
+                IrAstTy::Pointer(ty) => {
                     let ty = ty.to_ir_type(context);
-                    Type::Pointer(Pointer::new(context, ty, *is_mut, None))
+                    Type::get_pointer(context, ty)
                 }
             }
         }
 
-        fn to_ir_aggregate_type(&self, context: &mut Context) -> Aggregate {
+        fn to_ir_aggregate_type(&self, context: &mut Context) -> Type {
             match self {
                 IrAstTy::Array(el_ty, count) => {
                     let el_ty = el_ty.to_ir_type(context);
-                    Aggregate::new_array(context, el_ty, *count)
+                    Type::get_array(context, el_ty, *count)
                 }
                 IrAstTy::Struct(tys) | IrAstTy::Union(tys) => {
                     let tys = tys.iter().map(|ty| ty.to_ir_type(context)).collect();
-                    Aggregate::new_struct(context, tys)
+                    Type::get_struct(context, tys)
                 }
                 _otherwise => {
                     unreachable!("Converting non aggregate IR AST type to IR aggregate type.")
@@ -1109,22 +1088,12 @@ mod ir_builder {
                             )
                             .add_metadatum(context, opt_metadata)
                     }
-                    IrAstOperation::ExtractElement(aval, ty, idx) => {
+                    IrAstOperation::GetElementPtr(val, ty, idcs) => {
                         let ir_ty = ty.to_ir_aggregate_type(context);
+                        let idcs = idcs.iter().map(|idx| *val_map.get(idx).unwrap()).collect();
                         block
                             .ins(context)
-                            .extract_element(
-                                *val_map.get(&aval).unwrap(),
-                                ir_ty,
-                                *val_map.get(&idx).unwrap(),
-                            )
-                            .add_metadatum(context, opt_metadata)
-                    }
-                    IrAstOperation::ExtractValue(val, ty, idcs) => {
-                        let ir_ty = ty.to_ir_aggregate_type(context);
-                        block
-                            .ins(context)
-                            .extract_value(*val_map.get(&val).unwrap(), ir_ty, idcs)
+                            .get_elm_ptr(*val_map.get(&val).unwrap(), ir_ty, idcs)
                             .add_metadatum(context, opt_metadata)
                     }
                     IrAstOperation::GetStorageKey() => block
@@ -1142,30 +1111,6 @@ mod ir_builder {
                         .ins(context)
                         .gtf(*val_map.get(&index).unwrap(), tx_field_id)
                         .add_metadatum(context, opt_metadata),
-                    IrAstOperation::InsertElement(aval, ty, val, idx) => {
-                        let ir_ty = ty.to_ir_aggregate_type(context);
-                        block
-                            .ins(context)
-                            .insert_element(
-                                *val_map.get(&aval).unwrap(),
-                                ir_ty,
-                                *val_map.get(&val).unwrap(),
-                                *val_map.get(&idx).unwrap(),
-                            )
-                            .add_metadatum(context, opt_metadata)
-                    }
-                    IrAstOperation::InsertValue(aval, ty, ival, idcs) => {
-                        let ir_ty = ty.to_ir_aggregate_type(context);
-                        block
-                            .ins(context)
-                            .insert_value(
-                                *val_map.get(&aval).unwrap(),
-                                ir_ty,
-                                *val_map.get(&ival).unwrap(),
-                                idcs,
-                            )
-                            .add_metadatum(context, opt_metadata)
-                    }
                     IrAstOperation::IntToPtr(val, ty) => {
                         let to_ty = ty.to_ir_type(context);
                         block

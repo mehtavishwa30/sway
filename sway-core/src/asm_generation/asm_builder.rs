@@ -616,7 +616,7 @@ impl<'ir> AsmBuilder<'ir> {
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
         let elem_type = ty.get_elem_type(self.context).unwrap();
         let elem_size = ir_type_size_in_bytes(self.context, &elem_type);
-        if elem_type.is_copy_type() {
+        if elem_type.is_copy_type(self.context) {
             self.cur_bytecode.push(Op {
                 opcode: Either::Left(VirtualOp::MULI(
                     rel_offset_reg.clone(),
@@ -700,7 +700,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         let instr_reg = self.reg_seqr.next();
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        if field_type.is_copy_type() {
+        if field_type.is_copy_type(self.context) {
             if extract_offset > compiler_constants::TWELVE_BITS {
                 let offset_reg = self.reg_seqr.next();
                 self.number_to_reg(extract_offset, &offset_reg, owning_span.clone());
@@ -912,7 +912,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         let elem_type = ty.get_elem_type(self.context).unwrap();
         let elem_size = ir_type_size_in_bytes(self.context, &elem_type);
-        if elem_type.is_copy_type() {
+        if elem_type.is_copy_type(self.context) {
             self.cur_bytecode.push(Op {
                 opcode: Either::Left(VirtualOp::MULI(
                     rel_offset_reg.clone(),
@@ -1023,7 +1023,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
 
-        if value_type.is_copy_type() {
+        if value_type.is_copy_type(self.context) {
             if insert_offs > compiler_constants::TWELVE_BITS {
                 let insert_offs_reg = self.reg_seqr.next();
                 self.number_to_reg(insert_offs, &insert_offs_reg, owning_span.clone());
@@ -1128,7 +1128,7 @@ impl<'ir> AsmBuilder<'ir> {
                 }
                 Storage::Stack(word_offs) => {
                     let base_reg = self.locals_base_reg().clone();
-                    if ptr.get_type(self.context).is_copy_type() {
+                    if ptr.get_type(self.context).is_copy_type(self.context) {
                         // Value can fit in a register, so we load the value.
                         if word_offs > compiler_constants::TWELVE_BITS {
                             let offs_reg = self.reg_seqr.next();
@@ -1241,7 +1241,7 @@ impl<'ir> AsmBuilder<'ir> {
         let log_val_reg = self.value_to_register(log_val);
         let log_id_reg = self.value_to_register(log_id);
 
-        if log_ty.is_copy_type() {
+        if log_ty.is_copy_type(self.context) {
             self.cur_bytecode.push(Op {
                 owning_span,
                 opcode: Either::Left(VirtualOp::LOG(
@@ -1311,7 +1311,7 @@ impl<'ir> AsmBuilder<'ir> {
 
     fn compile_ret_from_entry(&mut self, instr_val: &Value, ret_val: &Value, ret_type: &Type) {
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        if ret_type.eq(self.context, &Type::Unit) {
+        if ret_type.eq(self.context, &Type::get_unit(self.context)) {
             // Unit returns should always be zero, although because they can be omitted from
             // functions, the register is sometimes uninitialized. Manually return zero in this
             // case.
@@ -1325,7 +1325,7 @@ impl<'ir> AsmBuilder<'ir> {
         } else {
             let ret_reg = self.value_to_register(ret_val);
 
-            if ret_type.is_copy_type() {
+            if ret_type.is_copy_type(self.context) {
                 self.cur_bytecode.push(Op {
                     owning_span,
                     opcode: Either::Left(VirtualOp::RET(ret_reg)),
@@ -1410,14 +1410,8 @@ impl<'ir> AsmBuilder<'ir> {
         access_type: StateAccessType,
     ) -> CompileResult<()> {
         // Make sure that both val and key are pointers to B256.
-        assert!(matches!(
-            val.get_stripped_ptr_type(self.context),
-            Some(Type::B256)
-        ));
-        assert!(matches!(
-            key.get_stripped_ptr_type(self.context),
-            Some(Type::B256)
-        ));
+        assert!(val.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
+        assert!(key.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
 
         let key_ptr = self.resolve_ptr(key);
@@ -1428,7 +1422,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::B256));
+        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
 
         let val_reg = if matches!(
             val.get_instruction(self.context),
@@ -1446,7 +1440,7 @@ impl<'ir> AsmBuilder<'ir> {
             }
             let (val_ptr, ptr_ty, offset) = val_ptr.value.unwrap();
             // Expect the ptr_ty for val to also be B256
-            assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::B256));
+            assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
             match self.ptr_map.get(&val_ptr) {
                 Some(Storage::Stack(val_offset)) => {
                     let base_reg = self.locals_base_reg().clone();
@@ -1479,10 +1473,7 @@ impl<'ir> AsmBuilder<'ir> {
 
     fn compile_state_load_word(&mut self, instr_val: &Value, key: &Value) -> CompileResult<()> {
         // Make sure that the key is a pointers to B256.
-        assert!(matches!(
-            key.get_stripped_ptr_type(self.context),
-            Some(Type::B256)
-        ));
+        assert!(key.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
 
         let key_ptr = self.resolve_ptr(key);
         if key_ptr.value.is_none() {
@@ -1492,7 +1483,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::B256));
+        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
 
         let load_reg = self.reg_seqr.next();
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
@@ -1523,16 +1514,10 @@ impl<'ir> AsmBuilder<'ir> {
         key: &Value,
     ) -> CompileResult<()> {
         // Make sure that key is a pointer to B256.
-        assert!(matches!(
-            key.get_stripped_ptr_type(self.context),
-            Some(Type::B256)
-        ));
+        assert!(key.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
 
         // Make sure that store_val is a U64 value.
-        assert!(matches!(
-            store_val.get_type(self.context),
-            Some(Type::Uint(64))
-        ));
+        assert!(store_val.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
         let store_reg = self.value_to_register(store_val);
 
         // Expect the get_ptr here to have type b256 and offset = 0???
@@ -1544,7 +1529,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::B256));
+        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
 
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
         match self.ptr_map.get(&key_ptr) {
@@ -1589,7 +1574,7 @@ impl<'ir> AsmBuilder<'ir> {
                     let store_type = ptr.get_type(self.context);
                     let store_size_in_words =
                         size_bytes_in_words!(ir_type_size_in_bytes(self.context, store_type));
-                    if store_type.is_copy_type() {
+                    if store_type.is_copy_type(self.context) {
                         let base_reg = self.locals_base_reg().clone();
 
                         // A single word can be stored with SW.

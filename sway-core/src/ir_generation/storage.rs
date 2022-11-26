@@ -5,7 +5,8 @@ use fuel_types::{Bytes32, Bytes8};
 use sway_ir::{
     constant::{Constant, ConstantValue},
     context::Context,
-    irtype::{AggregateContent, Type},
+    irtype::Type,
+    TypeContent,
 };
 use sway_types::state::StateIndex;
 
@@ -59,13 +60,13 @@ pub fn serialize_to_storage_slots(
     ty: &Type,
     indices: &[usize],
 ) -> Vec<StorageSlot> {
-    match (&ty, &constant.value) {
+    match (*ty.get_content(context), &constant.value) {
         (_, ConstantValue::Undef) => vec![],
-        (Type::Unit, ConstantValue::Unit) => vec![StorageSlot::new(
+        (TypeContent::Unit, ConstantValue::Unit) => vec![StorageSlot::new(
             get_storage_key(ix, indices),
             Bytes32::new([0; 32]),
         )],
-        (Type::Bool, ConstantValue::Bool(b)) => {
+        (TypeContent::Bool, ConstantValue::Bool(b)) => {
             vec![StorageSlot::new(
                 get_storage_key(ix, indices),
                 Bytes32::new(
@@ -80,7 +81,7 @@ pub fn serialize_to_storage_slots(
                 ),
             )]
         }
-        (Type::Uint(_), ConstantValue::Uint(n)) => {
+        (TypeContent::Uint(_), ConstantValue::Uint(n)) => {
             vec![StorageSlot::new(
                 get_storage_key(ix, indices),
                 Bytes32::new(
@@ -94,39 +95,34 @@ pub fn serialize_to_storage_slots(
                 ),
             )]
         }
-        (Type::B256, ConstantValue::B256(b)) => {
+        (TypeContent::B256, ConstantValue::B256(b)) => {
             vec![StorageSlot::new(
                 get_storage_key(ix, indices),
                 Bytes32::new(*b),
             )]
         }
-        (Type::Array(_), ConstantValue::Array(_a)) => {
+        (TypeContent::Array(..), ConstantValue::Array(_a)) => {
             unimplemented!("Arrays in storage have not been implemented yet.")
         }
-        (Type::Struct(aggregate), ConstantValue::Struct(vec)) => {
-            match aggregate.get_content(context) {
-                AggregateContent::FieldTypes(field_tys) => vec
-                    .iter()
-                    .zip(field_tys.iter())
-                    .enumerate()
-                    .flat_map(|(i, (f, ty))| {
-                        serialize_to_storage_slots(
-                            f,
-                            context,
-                            ix,
-                            ty,
-                            &indices
-                                .iter()
-                                .cloned()
-                                .chain(vec![i].iter().cloned())
-                                .collect::<Vec<usize>>(),
-                        )
-                    })
-                    .collect(),
-                _ => unreachable!("Wrong content for struct."),
-            }
-        }
-        (Type::Union(_), _) | (Type::String(_), _) => {
+        (TypeContent::Struct(field_tys), ConstantValue::Struct(vec)) => vec
+            .iter()
+            .zip(field_tys.iter())
+            .enumerate()
+            .flat_map(|(i, (f, ty))| {
+                serialize_to_storage_slots(
+                    f,
+                    context,
+                    ix,
+                    ty,
+                    &indices
+                        .iter()
+                        .cloned()
+                        .chain(vec![i].iter().cloned())
+                        .collect::<Vec<usize>>(),
+                )
+            })
+            .collect(),
+        (TypeContent::Union(_), _) | (TypeContent::String(_), _) => {
             // Serialize the constant data in words and add zero words until the number of words
             // is a multiple of 4. This is useful because each storage slot is 4 words.
             let mut packed = serialize_to_words(constant, context, ty);
@@ -160,10 +156,10 @@ pub fn serialize_to_storage_slots(
 /// words and add left padding up to size of `ty`.
 ///
 pub fn serialize_to_words(constant: &Constant, context: &Context, ty: &Type) -> Vec<Bytes8> {
-    match (&ty, &constant.value) {
+    match (*ty.get_content(context), &constant.value) {
         (_, ConstantValue::Undef) => vec![],
-        (Type::Unit, ConstantValue::Unit) => vec![Bytes8::new([0; 8])],
-        (Type::Bool, ConstantValue::Bool(b)) => {
+        (TypeContent::Unit, ConstantValue::Unit) => vec![Bytes8::new([0; 8])],
+        (TypeContent::Bool, ConstantValue::Bool(b)) => {
             vec![Bytes8::new(
                 [0; 7]
                     .iter()
@@ -174,15 +170,15 @@ pub fn serialize_to_words(constant: &Constant, context: &Context, ty: &Type) -> 
                     .unwrap(),
             )]
         }
-        (Type::Uint(_), ConstantValue::Uint(n)) => {
+        (TypeContent::Uint(_), ConstantValue::Uint(n)) => {
             vec![Bytes8::new(n.to_be_bytes())]
         }
-        (Type::B256, ConstantValue::B256(b)) => Vec::from_iter(
+        (TypeContent::B256, ConstantValue::B256(b)) => Vec::from_iter(
             (0..4)
                 .into_iter()
                 .map(|i| Bytes8::new(b[8 * i..8 * i + 8].try_into().unwrap())),
         ),
-        (Type::String(_), ConstantValue::String(s)) => {
+        (TypeContent::String(_), ConstantValue::String(s)) => {
             // Turn the bytes into serialized words (Bytes8).
             let mut s = s.clone();
             s.extend(vec![0; ((s.len() + 7) / 8) * 8 - s.len()]);
@@ -198,20 +194,15 @@ pub fn serialize_to_words(constant: &Constant, context: &Context, ty: &Type) -> 
                 )
             }))
         }
-        (Type::Array(_), ConstantValue::Array(_)) => {
+        (TypeContent::Array(..), ConstantValue::Array(_)) => {
             unimplemented!("Arrays in storage have not been implemented yet.")
         }
-        (Type::Struct(aggregate), ConstantValue::Struct(vec)) => {
-            match aggregate.get_content(context) {
-                AggregateContent::FieldTypes(field_tys) => vec
-                    .iter()
-                    .zip(field_tys.iter())
-                    .flat_map(|(f, ty)| serialize_to_words(f, context, ty))
-                    .collect(),
-                _ => unreachable!("Wrong content for struct."),
-            }
-        }
-        (Type::Union(_), _) => {
+        (TypeContent::Struct(field_tys), ConstantValue::Struct(vec)) => vec
+            .iter()
+            .zip(field_tys.iter())
+            .flat_map(|(f, ty)| serialize_to_words(f, context, ty))
+            .collect(),
+        (TypeContent::Union(_), _) => {
             let value_size_in_words = ir_type_size_in_bytes(context, ty) / 8;
             let constant_size_in_words = ir_type_size_in_bytes(context, &constant.ty) / 8;
             assert!(value_size_in_words >= constant_size_in_words);

@@ -6,13 +6,13 @@ use crate::{
 use super::convert::convert_resolved_typeid_no_span;
 
 use sway_error::error::CompileError;
-use sway_ir::{Aggregate, Context, Type};
+use sway_ir::{Context, Type};
 use sway_types::span::Spanned;
 
 pub(super) fn create_enum_aggregate(
     context: &mut Context,
     variants: Vec<ty::TyEnumVariant>,
-) -> Result<Aggregate, CompileError> {
+) -> Result<Type, CompileError> {
     // Create the enum aggregate first.  NOTE: single variant enums don't need an aggregate but are
     // getting one here anyway.  They don't need to be a tagged union either.
     let field_types: Vec<_> = variants
@@ -23,44 +23,50 @@ pub(super) fn create_enum_aggregate(
     // Enums where all the variants are unit types don't really need the union. Only a tag is
     // needed. For consistency, and to keep enums as reference types, we keep the tag in an
     // Aggregate.
-    Ok(if field_types.iter().all(|f| matches!(f, Type::Unit)) {
-        Aggregate::new_struct(context, vec![Type::Uint(64)])
+    Ok(if field_types.iter().all(|f| f.is_unit(context)) {
+        Type::get_struct(context, vec![Type::get_uint(context, 64)])
     } else {
-        let enum_aggregate = Aggregate::new_struct(context, field_types);
-        Aggregate::new_struct(context, vec![Type::Uint(64), Type::Union(enum_aggregate)])
+        let enum_aggregate = Type::get_struct(context, field_types);
+        Type::get_struct(
+            context,
+            vec![
+                Type::get_uint(context, 64),
+                Type::get_union(context, field_types),
+            ],
+        )
     })
 }
 
 pub(super) fn create_tuple_aggregate(
     context: &mut Context,
     fields: Vec<TypeId>,
-) -> Result<Aggregate, CompileError> {
+) -> Result<Type, CompileError> {
     let field_types = fields
         .into_iter()
         .map(|ty_id| convert_resolved_typeid_no_span(context, &ty_id))
         .collect::<Result<Vec<_>, CompileError>>()?;
 
-    Ok(Aggregate::new_struct(context, field_types))
+    Ok(Type::get_struct(context, field_types))
 }
 
 pub(super) fn create_array_aggregate(
     context: &mut Context,
     element_type_id: TypeId,
     count: u64,
-) -> Result<Aggregate, CompileError> {
+) -> Result<Type, CompileError> {
     let element_type = convert_resolved_typeid_no_span(context, &element_type_id)?;
-    Ok(Aggregate::new_array(context, element_type, count))
+    Ok(Type::get_array(context, element_type, count))
 }
 
 pub(super) fn get_aggregate_for_types(
     context: &mut Context,
     type_ids: &[TypeId],
-) -> Result<Aggregate, CompileError> {
+) -> Result<Type, CompileError> {
     let types = type_ids
         .iter()
         .map(|ty_id| convert_resolved_typeid_no_span(context, ty_id))
         .collect::<Result<Vec<_>, CompileError>>()?;
-    Ok(Aggregate::new_struct(context, types))
+    Ok(Type::get_struct(context, types))
 }
 
 pub(super) fn get_struct_name_field_index_and_type(

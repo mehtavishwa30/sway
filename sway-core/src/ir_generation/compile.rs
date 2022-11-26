@@ -204,7 +204,7 @@ fn convert_fn_param(
         (
             param.name.as_str().into(),
             if param.is_reference && look_up_type_id(param.type_id).is_copy_type() {
-                Type::Pointer(Pointer::new(context, ty, param.is_mutable, None))
+                Type::get_pointer(context, ty)
             } else {
                 ty
             },
@@ -244,12 +244,12 @@ fn compile_fn_with_args(
     let is_entry = selector.is_some()
         || (matches!(module.get_kind(context), Kind::Script | Kind::Predicate)
             && name.as_str() == "main");
-    let returns_by_ref = !is_entry && !ret_type.is_copy_type();
+    let returns_by_ref = !is_entry && !ret_type.is_copy_type(context);
     if returns_by_ref {
         // Instead of 'returning' a by-ref value we make the last argument an 'out' parameter.
         args.push((
             "__ret_value".to_owned(),
-            Type::Pointer(Pointer::new(context, ret_type, true, None)),
+            Type::get_pointer(context, ret_type),
             md_mgr.span_to_md(context, &return_type_span),
         ));
     }
@@ -280,7 +280,11 @@ fn compile_fn_with_args(
     // Special case: if the return type is unit but the return value type is not, then we have an
     // implicit return from the last expression in the code block having a semi-colon.  This isn't
     // codified in the AST explicitly so we need to make a unit to return here.
-    if ret_type.eq(context, &Type::Unit) && !matches!(ret_val.get_type(context), Some(Type::Unit)) {
+    if ret_type.eq(context, &Type::get_unit(context))
+        && !(ret_val
+            .get_type(context)
+            .map_or_else(|| false, |t| t.is_unit(context)))
+    {
         ret_val = Constant::get_unit(context);
     }
 
@@ -305,7 +309,7 @@ fn compile_fn_with_args(
             // Need to copy ref-type return values to the 'out' parameter.
             ret_val = compiler.compile_copy_to_last_arg(context, ret_val, None);
         }
-        if ret_type.eq(context, &Type::Unit) {
+        if ret_type.is_unit(context) {
             ret_val = Constant::get_unit(context);
         }
         compiler.current_block.ins(context).ret(ret_val, ret_type);

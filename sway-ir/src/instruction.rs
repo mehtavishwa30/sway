@@ -15,10 +15,11 @@ use crate::{
     block::Block,
     context::Context,
     function::Function,
-    irtype::{Aggregate, Type},
+    irtype::Type,
     pointer::Pointer,
     pretty::DebugWithContext,
     value::{Value, ValueDatum},
+    Constant,
 };
 
 #[derive(Debug, Clone, DebugWithContext)]
@@ -62,18 +63,6 @@ pub enum Instruction {
         asset_id: Value,
         gas: Value,
     },
-    /// Reading a specific element from an array.
-    ExtractElement {
-        array: Value,
-        ty: Aggregate,
-        index_val: Value,
-    },
-    /// Reading a specific field from (nested) structs.
-    ExtractValue {
-        aggregate: Value,
-        ty: Aggregate,
-        indices: Vec<u64>,
-    },
     /// Generate a unique integer value
     GetStorageKey,
     Gtf {
@@ -86,19 +75,11 @@ pub enum Instruction {
         ptr_ty: Pointer,
         offset: u64,
     },
-    /// Writing a specific value to an array.
-    InsertElement {
-        array: Value,
-        ty: Aggregate,
-        value: Value,
-        index_val: Value,
-    },
-    /// Writing a specific value to a (nested) struct field.
-    InsertValue {
-        aggregate: Value,
-        ty: Aggregate,
-        value: Value,
-        indices: Vec<u64>,
+    /// Address computation instruction. See LLVM's GetElementPtr instruction.
+    GetElmPtr {
+        ptr: Value,
+        pointee_ty: Type,
+        indices: Vec<Value>,
     },
     /// Re-interpret an integer value as pointer of some type
     IntToPtr(Value, Type),
@@ -205,19 +186,15 @@ impl Instruction {
     /// `Ret` do not have a type.
     pub fn get_type(&self, context: &Context) -> Option<Type> {
         match self {
-            Instruction::AddrOf(_) => Some(Type::Uint(64)),
+            Instruction::AddrOf(_) => Some(Type::get_uint(context, 64)),
             Instruction::AsmBlock(asm_block, _) => Some(asm_block.get_type(context)),
             Instruction::BinaryOp { arg1, .. } => arg1.get_type(context),
             Instruction::BitCast(_, ty) => Some(*ty),
             Instruction::Call(function, _) => Some(context.functions[function.0].return_type),
-            Instruction::Cmp(..) => Some(Type::Bool),
+            Instruction::Cmp(..) => Some(Type::get_bool(context)),
             Instruction::ContractCall { return_type, .. } => Some(*return_type),
-            Instruction::ExtractElement { ty, .. } => ty.get_elem_type(context),
-            Instruction::ExtractValue { ty, indices, .. } => ty.get_field_type(context, indices),
-            Instruction::GetStorageKey => Some(Type::B256),
-            Instruction::Gtf { .. } => Some(Type::Uint(64)),
-            Instruction::InsertElement { array, .. } => array.get_type(context),
-            Instruction::InsertValue { aggregate, .. } => aggregate.get_type(context),
+            Instruction::GetStorageKey => Some(Type::get_b256(context)),
+            Instruction::Gtf { .. } => Some(Type::get_uint(context, 64)),
             Instruction::Load(ptr_val) => match &context.values[ptr_val.0].value {
                 ValueDatum::Argument(arg) => Some(arg.ty.strip_ptr_type(context)),
                 ValueDatum::Constant(cons) => Some(cons.ty.strip_ptr_type(context)),
@@ -225,12 +202,14 @@ impl Instruction {
                     ins.get_type(context).map(|f| f.strip_ptr_type(context))
                 }
             },
-            Instruction::Log { .. } => Some(Type::Unit),
-            Instruction::ReadRegister(_) => Some(Type::Uint(64)),
-            Instruction::StateLoadWord(_) => Some(Type::Uint(64)),
+            Instruction::Log { .. } => Some(Type::get_unit(context)),
+            Instruction::ReadRegister(_) => Some(Type::get_uint(context, 64)),
+            Instruction::StateLoadWord(_) => Some(Type::get_uint(context, 64)),
 
             // These can be recursed to via Load, so we return the pointer type.
-            Instruction::GetPointer { ptr_ty, .. } => Some(Type::Pointer(*ptr_ty)),
+            Instruction::GetPointer { ptr_ty, .. } => {
+                Some(Type::get_pointer(context, *ptr_ty.get_type(context)))
+            }
 
             // Used to re-interpret an integer as a pointer to some type so return the pointer type.
             Instruction::IntToPtr(_, ty) => Some(*ty),
@@ -241,48 +220,44 @@ impl Instruction {
             Instruction::Ret(..) => None,
             Instruction::Revert(..) => None,
 
-            Instruction::MemCopy { .. } => Some(Type::Unit),
-            Instruction::StateLoadQuadWord { .. } => Some(Type::Unit),
-            Instruction::StateStoreQuadWord { .. } => Some(Type::Unit),
-            Instruction::StateStoreWord { .. } => Some(Type::Unit),
-            Instruction::Store { .. } => Some(Type::Unit),
+            Instruction::MemCopy { .. } => Some(Type::get_unit(context)),
+            Instruction::StateLoadQuadWord { .. } => Some(Type::get_unit(context)),
+            Instruction::StateStoreQuadWord { .. } => Some(Type::get_unit(context)),
+            Instruction::StateStoreWord { .. } => Some(Type::get_unit(context)),
+            Instruction::Store { .. } => Some(Type::get_unit(context)),
 
             // No-op is also no-type.
             Instruction::Nop => None,
+            Instruction::GetElmPtr {
+                ptr: _,
+                pointee_ty,
+                indices,
+            } => {
+                let ty = pointee_ty
+                    .get_indexed_type(context, indices)
+                    .expect("GetElmPtr indexing error");
+                Some(Type::get_pointer(context, Type::get_pointer(context, ty)))
+            }
         }
     }
 
     /// Some [`Instruction`]s may have struct arguments.  Return it if so for this instruction.
-    pub fn get_aggregate(&self, context: &Context) -> Option<Aggregate> {
-        match self {
-            Instruction::Call(func, _args) => match &context.functions[func.0].return_type {
-                Type::Array(aggregate) => Some(*aggregate),
-                Type::Struct(aggregate) => Some(*aggregate),
-                _otherwise => None,
-            },
-            Instruction::GetPointer { ptr_ty, .. } => match ptr_ty.get_type(context) {
-                Type::Array(aggregate) => Some(*aggregate),
-                Type::Struct(aggregate) => Some(*aggregate),
-                _otherwise => None,
-            },
-            Instruction::ExtractElement { ty, .. } => {
-                ty.get_elem_type(context).and_then(|ty| match ty {
-                    Type::Array(nested_aggregate) => Some(nested_aggregate),
-                    Type::Struct(nested_aggregate) => Some(nested_aggregate),
-                    _otherwise => None,
-                })
-            }
-            Instruction::ExtractValue { ty, indices, .. } => {
-                // This array is a field in a struct or element in an array.
-                ty.get_field_type(context, indices).and_then(|ty| match ty {
-                    Type::Array(nested_aggregate) => Some(nested_aggregate),
-                    Type::Struct(nested_aggregate) => Some(nested_aggregate),
-                    _otherwise => None,
-                })
-            }
-
+    pub fn get_aggregate(&self, context: &Context) -> Option<Type> {
+        let ty = match self {
+            Instruction::Call(func, _args) => Some(&context.functions[func.0].return_type),
+            Instruction::GetPointer { ptr_ty, .. } => Some(ptr_ty.get_type(context)),
             // Unknown aggregate instruction.  Adding these as we come across them...
             _otherwise => None,
+        };
+        if let Some(ty) = ty {
+            // TODO: Rewrite using if-let chain.
+            if ty.is_array(context) && ty.is_struct(context) {
+                Some(*ty)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
@@ -320,16 +295,6 @@ impl Instruction {
                 asset_id,
                 gas,
             } => vec![*params, *coins, *asset_id, *gas],
-            Instruction::ExtractElement {
-                array,
-                ty: _,
-                index_val,
-            } => vec![*array, *index_val],
-            Instruction::ExtractValue {
-                aggregate,
-                ty: _,
-                indices: _,
-            } => vec![*aggregate],
             Instruction::GetStorageKey => vec![],
             Instruction::Gtf {
                 index,
@@ -344,18 +309,6 @@ impl Instruction {
             {
                 vec![]
             }
-            Instruction::InsertElement {
-                array,
-                ty: _,
-                value,
-                index_val,
-            } => vec![*array, *value, *index_val],
-            Instruction::InsertValue {
-                aggregate,
-                ty: _,
-                value,
-                indices: _,
-            } => vec![*aggregate, *value],
             Instruction::IntToPtr(v, _) => vec![*v],
             Instruction::Load(v) => vec![*v],
             Instruction::Log {
@@ -375,6 +328,11 @@ impl Instruction {
             } => {
                 vec![*dst_val, *stored_val]
             }
+            Instruction::GetElmPtr {
+                ptr,
+                pointee_ty: _,
+                indices: _,
+            } => vec![*ptr],
         }
     }
 
@@ -428,29 +386,6 @@ impl Instruction {
                 replace(gas);
             }
             Instruction::GetPointer { .. } => (),
-            Instruction::InsertElement {
-                array,
-                value,
-                index_val,
-                ..
-            } => {
-                replace(array);
-                replace(value);
-                replace(index_val);
-            }
-            Instruction::InsertValue {
-                aggregate, value, ..
-            } => {
-                replace(aggregate);
-                replace(value);
-            }
-            Instruction::ExtractElement {
-                array, index_val, ..
-            } => {
-                replace(array);
-                replace(index_val);
-            }
-            Instruction::ExtractValue { aggregate, .. } => replace(aggregate),
             Instruction::GetStorageKey => (),
             Instruction::Gtf { index, .. } => replace(index),
             Instruction::IntToPtr(value, _) => replace(value),
@@ -489,42 +424,44 @@ impl Instruction {
             Instruction::Store { stored_val, .. } => {
                 replace(stored_val);
             }
+            Instruction::GetElmPtr {
+                ptr,
+                pointee_ty: _,
+                indices: _,
+            } => {
+                replace(ptr);
+            }
         }
     }
 
     pub fn may_have_side_effect(&self) -> bool {
         match self {
             Instruction::AsmBlock(_, _)
-                | Instruction::Call(..)
-                | Instruction::ContractCall { .. }
-                | Instruction::Log { .. }
-                | Instruction::MemCopy { .. }
-                | Instruction::StateLoadQuadWord { .. }
-                | Instruction::StateStoreQuadWord { .. }
-                | Instruction::StateStoreWord { .. }
-                | Instruction::Store { .. }
-                // Insert(Element/Value), unlike those in LLVM
-                // do not have SSA semantics. They are like stores.
-                | Instruction::InsertElement { .. }
-                | Instruction::InsertValue { .. } => true,
-                | Instruction::AddrOf(_)
-                | Instruction::BitCast(..)
-                | Instruction::BinaryOp { .. }
-                | Instruction::Cmp(..)
-                | Instruction::ExtractElement {  .. }
-                | Instruction::ExtractValue { .. }
-                | Instruction::GetStorageKey
-                | Instruction::Gtf { .. }
-                | Instruction::Load(_)
-                | Instruction::ReadRegister(_)
-                | Instruction::StateLoadWord(_)
-                | Instruction::GetPointer { .. }
-                | Instruction::IntToPtr(..)
-                | Instruction::Branch(_)
-                | Instruction::ConditionalBranch { .. }
-                | Instruction::Ret(..)
-                | Instruction::Revert(..)
-                | Instruction::Nop => false,
+            | Instruction::Call(..)
+            | Instruction::ContractCall { .. }
+            | Instruction::Log { .. }
+            | Instruction::MemCopy { .. }
+            | Instruction::StateLoadQuadWord { .. }
+            | Instruction::StateStoreQuadWord { .. }
+            | Instruction::StateStoreWord { .. }
+            | Instruction::Store { .. } => true,
+            Instruction::AddrOf(_)
+            | Instruction::BitCast(..)
+            | Instruction::BinaryOp { .. }
+            | Instruction::Cmp(..)
+            | Instruction::GetElmPtr { .. }
+            | Instruction::GetStorageKey
+            | Instruction::Gtf { .. }
+            | Instruction::Load(_)
+            | Instruction::ReadRegister(_)
+            | Instruction::StateLoadWord(_)
+            | Instruction::GetPointer { .. }
+            | Instruction::IntToPtr(..)
+            | Instruction::Branch(_)
+            | Instruction::ConditionalBranch { .. }
+            | Instruction::Ret(..)
+            | Instruction::Revert(..)
+            | Instruction::Nop => false,
         }
     }
 
@@ -723,24 +660,28 @@ impl<'a> InstructionInserter<'a> {
         )
     }
 
-    pub fn extract_element(self, array: Value, ty: Aggregate, index_val: Value) -> Value {
-        make_instruction!(
-            self,
-            Instruction::ExtractElement {
-                array,
-                ty,
-                index_val,
-            }
-        )
+    pub fn get_elm_ptr_from_int_idx(
+        self,
+        ptr: Value,
+        pointee_ty: Type,
+        indices: Vec<u64>,
+    ) -> Value {
+        let indices = indices
+            .iter()
+            .map(|idx| {
+                Value::new_constant(self.context, Constant::new_uint(self.context, 64, *idx))
+            })
+            .collect();
+        self.get_elm_ptr(ptr, pointee_ty, indices)
     }
 
-    pub fn extract_value(self, aggregate: Value, ty: Aggregate, indices: Vec<u64>) -> Value {
+    pub fn get_elm_ptr(self, ptr: Value, pointee_ty: Type, indices: Vec<Value>) -> Value {
         make_instruction!(
             self,
-            Instruction::ExtractValue {
-                aggregate,
-                ty,
-                indices,
+            Instruction::GetElmPtr {
+                ptr,
+                pointee_ty,
+                indices
             }
         )
     }
@@ -761,42 +702,6 @@ impl<'a> InstructionInserter<'a> {
                 base_ptr,
                 ptr_ty: ptr,
                 offset,
-            }
-        )
-    }
-
-    pub fn insert_element(
-        self,
-        array: Value,
-        ty: Aggregate,
-        value: Value,
-        index_val: Value,
-    ) -> Value {
-        make_instruction!(
-            self,
-            Instruction::InsertElement {
-                array,
-                ty,
-                value,
-                index_val,
-            }
-        )
-    }
-
-    pub fn insert_value(
-        self,
-        aggregate: Value,
-        ty: Aggregate,
-        value: Value,
-        indices: Vec<u64>,
-    ) -> Value {
-        make_instruction!(
-            self,
-            Instruction::InsertValue {
-                aggregate,
-                ty,
-                value,
-                indices,
             }
         )
     }

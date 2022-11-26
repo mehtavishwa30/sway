@@ -2,7 +2,9 @@
 //!
 //! NOTE: much of this was hastily put together and can be streamlined or refactored altogether.
 
-use crate::{constant::Constant, context::Context, irtype::Type, pretty::DebugWithContext};
+use crate::{
+    constant::Constant, context::Context, irtype::Type, pretty::DebugWithContext,
+};
 
 /// A wrapper around an [ECS](https://github.com/fitzgen/generational-arena) handle into the
 /// [`Context`].
@@ -61,10 +63,8 @@ impl Pointer {
 
     /// Return whether this pointer is to a [`Type::Struct`] in particular.
     pub fn is_aggregate_ptr(&self, context: &Context) -> bool {
-        matches!(
-            &context.pointers[self.0].ty,
-            Type::Array(_) | Type::Struct(_) | Type::Union(_)
-        )
+        let ty = context.pointers[self.0].ty;
+        ty.is_array(context) || ty.is_struct(context) || ty.is_union(context)
     }
 
     pub fn is_equivalent(&self, context: &Context, other: &Pointer) -> bool {
