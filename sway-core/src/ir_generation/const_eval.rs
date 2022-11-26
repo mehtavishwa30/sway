@@ -174,18 +174,19 @@ pub(crate) fn compile_constant_expression_to_constant(
     };
     let mut known_consts = MappedStack::<Ident, Constant>::new();
 
-    const_eval_typed_expr(lookup, &mut known_consts, const_expr)?.map_or(err, Ok)
+    const_eval_typed_expr(context, lookup, &mut known_consts, const_expr)?.map_or(err, Ok)
 }
 
 /// Given an environment mapping names to constants,
 /// attempt to evaluate a typed expression to a constant.
 fn const_eval_typed_expr(
+    context: &mut Context,
     lookup: &mut LookupEnv,
     known_consts: &mut MappedStack<Ident, Constant>,
     expr: &ty::TyExpression,
 ) -> Result<Option<Constant>, CompileError> {
     Ok(match &expr.expression {
-        ty::TyExpressionVariant::Literal(l) => Some(convert_literal_to_constant(l)),
+        ty::TyExpressionVariant::Literal(l) => Some(convert_literal_to_constant(context, l)),
         ty::TyExpressionVariant::FunctionApplication {
             arguments,
             function_decl_id,
@@ -194,7 +195,7 @@ fn const_eval_typed_expr(
             let mut actuals_const: Vec<_> = vec![];
             for arg in arguments {
                 let (name, sub_expr) = arg;
-                let eval_expr_opt = const_eval_typed_expr(lookup, known_consts, sub_expr)?;
+                let eval_expr_opt = const_eval_typed_expr(context, lookup, known_consts, sub_expr)?;
                 if let Some(sub_const) = eval_expr_opt {
                     actuals_const.push((name, sub_const));
                 }
@@ -216,7 +217,7 @@ fn const_eval_typed_expr(
             }
             let body_contents_opt = function_decl.body.contents.last();
             let res = if let Some(first_expr) = body_contents_opt {
-                const_eval_typed_ast_node(lookup, known_consts, first_expr)?
+                const_eval_typed_ast_node(context, lookup, known_consts, first_expr)?
             } else {
                 None
             };
@@ -240,7 +241,7 @@ fn const_eval_typed_expr(
             let (mut field_typs, mut field_vals): (Vec<_>, Vec<_>) = (vec![], vec![]);
             for field in fields {
                 let ty::TyStructExpressionField { name: _, value, .. } = field;
-                let eval_expr_opt = const_eval_typed_expr(lookup, known_consts, value)?;
+                let eval_expr_opt = const_eval_typed_expr(context, lookup, known_consts, value)?;
                 if let Some(cv) = eval_expr_opt {
                     field_typs.push(value.return_type);
                     field_vals.push(cv);
@@ -251,15 +252,12 @@ fn const_eval_typed_expr(
                 // We couldn't evaluate all fields to a constant.
                 return Ok(None);
             }
-            get_aggregate_for_types(lookup.type_engine, lookup.context, &field_typs)
-                .map_or(None, |aggregate| {
-                    Some(Constant::new_struct(&aggregate, field_vals))
-                })
+            Some(Constant::new_struct(context, field_vals))
         }
         ty::TyExpressionVariant::Tuple { fields } => {
             let (mut field_typs, mut field_vals): (Vec<_>, Vec<_>) = (vec![], vec![]);
             for value in fields {
-                let eval_expr_opt = const_eval_typed_expr(lookup, known_consts, value)?;
+                let eval_expr_opt = const_eval_typed_expr(context, lookup, known_consts, value)?;
                 if let Some(cv) = eval_expr_opt {
                     field_typs.push(value.return_type);
                     field_vals.push(cv);
@@ -269,15 +267,12 @@ fn const_eval_typed_expr(
                 // We couldn't evaluate all fields to a constant.
                 return Ok(None);
             }
-            create_tuple_aggregate(lookup.type_engine, lookup.context, field_typs)
-                .map_or(None, |aggregate| {
-                    Some(Constant::new_struct(&aggregate, field_vals))
-                })
+            Some(Constant::new_struct(context, field_vals))
         }
         ty::TyExpressionVariant::Array { contents } => {
             let (mut element_typs, mut element_vals): (Vec<_>, Vec<_>) = (vec![], vec![]);
             for value in contents {
-                let eval_expr_opt = const_eval_typed_expr(lookup, known_consts, value)?;
+                let eval_expr_opt = const_eval_typed_expr(context, lookup, known_consts, value)?;
                 if let Some(cv) = eval_expr_opt {
                     element_typs.push(value.return_type);
                     element_vals.push(cv);
@@ -298,15 +293,11 @@ fn const_eval_typed_expr(
                 // This shouldn't happen if the type checker did its job.
                 return Ok(None);
             }
-            create_array_aggregate(
-                lookup.type_engine,
-                lookup.context,
-                element_type_id,
-                element_typs.len().try_into().unwrap(),
-            )
-            .map_or(None, |aggregate| {
-                Some(Constant::new_array(&aggregate, element_vals))
-            })
+            Some(Constant::new_array(
+                context,
+                element_vals[0].ty,
+                element_vals,
+            ))
         }
         ty::TyExpressionVariant::EnumInstantiation {
             enum_decl,
@@ -317,18 +308,19 @@ fn const_eval_typed_expr(
             let aggregate =
                 create_enum_aggregate(lookup.type_engine, lookup.context, &enum_decl.variants);
             if let Ok(aggregate) = aggregate {
-                let tag_value = Constant::new_uint(64, *tag as u64);
+                let tag_value = Constant::new_uint(context, 64, *tag as u64);
                 let mut fields: Vec<Constant> = vec![tag_value];
                 match contents {
-                    None => fields.push(Constant::new_unit()),
+                    None => fields.push(Constant::new_unit(context)),
                     Some(subexpr) => {
-                        let eval_expr = const_eval_typed_expr(lookup, known_consts, subexpr)?;
+                        let eval_expr =
+                            const_eval_typed_expr(context, lookup, known_consts, subexpr)?;
                         eval_expr.into_iter().for_each(|enum_val| {
                             fields.push(enum_val);
                         })
                     }
                 }
-                Some(Constant::new_struct(&aggregate, fields))
+                Some(Constant::new_struct(context, fields))
             } else {
                 None
             }
@@ -338,7 +330,7 @@ fn const_eval_typed_expr(
             field_to_access,
             resolved_type_of_parent,
             ..
-        } => match const_eval_typed_expr(lookup, known_consts, prefix)? {
+        } => match const_eval_typed_expr(context, lookup, known_consts, prefix)? {
             Some(Constant {
                 value: ConstantValue::Struct(fields),
                 ..
@@ -362,14 +354,16 @@ fn const_eval_typed_expr(
             prefix,
             elem_to_access_num,
             ..
-        } => match const_eval_typed_expr(lookup, known_consts, prefix)? {
+        } => match const_eval_typed_expr(context, lookup, known_consts, prefix)? {
             Some(Constant {
                 value: ConstantValue::Struct(fields),
                 ..
             }) => fields.get(*elem_to_access_num).cloned(),
             _ => None,
         },
-        ty::TyExpressionVariant::Return(exp) => const_eval_typed_expr(lookup, known_consts, exp)?,
+        ty::TyExpressionVariant::Return(exp) => {
+            const_eval_typed_expr(context, lookup, known_consts, exp)?
+        }
         ty::TyExpressionVariant::ArrayIndex { .. }
         | ty::TyExpressionVariant::IntrinsicFunction(_)
         | ty::TyExpressionVariant::CodeBlock(_)
@@ -391,6 +385,7 @@ fn const_eval_typed_expr(
 }
 
 fn const_eval_typed_ast_node(
+    context: &mut Context,
     lookup: &mut LookupEnv,
     known_consts: &mut MappedStack<Ident, Constant>,
     expr: &ty::TyAstNode,
@@ -401,7 +396,7 @@ fn const_eval_typed_ast_node(
             Ok(None)
         }
         ty::TyAstNodeContent::Expression(e) | ty::TyAstNodeContent::ImplicitReturnExpression(e) => {
-            const_eval_typed_expr(lookup, known_consts, e)
+            const_eval_typed_expr(context, lookup, known_consts, e)
         }
         ty::TyAstNodeContent::SideEffect => Ok(None),
     }

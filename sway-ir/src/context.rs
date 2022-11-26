@@ -7,11 +7,13 @@
 //! It is passed around as a mutable reference to many of the Sway-IR APIs.
 
 use generational_arena::Arena;
+use rustc_hash::FxHashMap;
+use std::cell::RefCell;
 
 use crate::{
-    asm::AsmBlockContent, block::BlockContent, function::FunctionContent, irtype::AggregateContent,
+    asm::AsmBlockContent, block::BlockContent, function::FunctionContent,
     metadata::Metadatum, module::ModuleContent, module::ModuleIterator, pointer::PointerContent,
-    value::ValueContent,
+    value::ValueContent, Type, TypeContent,
 };
 
 /// The main IR context handle.
@@ -25,7 +27,8 @@ pub struct Context {
     pub(crate) blocks: Arena<BlockContent>,
     pub(crate) values: Arena<ValueContent>,
     pub(crate) pointers: Arena<PointerContent>,
-    pub(crate) aggregates: Arena<AggregateContent>,
+    pub(crate) types: RefCell<Arena<TypeContent>>,
+    pub(crate) type_map: RefCell<FxHashMap<TypeContent, Type>>,
     pub(crate) asm_blocks: Arena<AsmBlockContent>,
     pub(crate) metadata: Arena<Metadatum>,
 

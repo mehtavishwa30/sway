@@ -388,7 +388,7 @@ fn convert_fn_param(
         (
             param.name.as_str().into(),
             if param.is_reference && type_engine.look_up_type_id(param.type_id).is_copy_type() {
-                Type::Pointer(Pointer::new(context, ty, param.is_mutable, None))
+                Type::get_pointer(context, ty)
             } else {
                 ty
             },
@@ -430,12 +430,12 @@ fn compile_fn_with_args(
 
     let ret_type = convert_resolved_typeid(type_engine, context, return_type, return_type_span)?;
 
-    let returns_by_ref = !is_entry && !ret_type.is_copy_type();
+    let returns_by_ref = !is_entry && !ret_type.is_copy_type(context);
     if returns_by_ref {
         // Instead of 'returning' a by-ref value we make the last argument an 'out' parameter.
         args.push((
             "__ret_value".to_owned(),
-            Type::Pointer(Pointer::new(context, ret_type, true, None)),
+            Type::get_pointer(context, ret_type),
             md_mgr.span_to_md(context, return_type_span),
         ));
     }
@@ -510,7 +510,7 @@ fn compile_fn_with_args(
             // Need to copy ref-type return values to the 'out' parameter.
             ret_val = compiler.compile_copy_to_last_arg(context, ret_val, None);
         }
-        if ret_type.eq(context, &Type::Unit) {
+        if ret_type.is_unit(context) {
             ret_val = Constant::get_unit(context);
         }
         compiler.current_block.ins(context).ret(ret_val, ret_type);

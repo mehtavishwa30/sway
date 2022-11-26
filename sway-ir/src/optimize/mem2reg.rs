@@ -39,7 +39,7 @@ fn get_validate_local_pointer(
 fn filter_usable_locals(context: &mut Context, function: &Function) -> HashSet<String> {
     let mut locals: HashSet<String> = function
         .locals_iter(context)
-        .filter(|(_, ptr)| (**ptr).get_type(context).is_copy_type())
+        .filter(|(_, ptr)| (**ptr).get_type(context).is_copy_type(context))
         .map(|(name, _)| name.clone())
         .collect();
 

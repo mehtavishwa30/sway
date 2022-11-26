@@ -17,7 +17,7 @@ use crate::{
     metadata::{combine, MetadataIndex},
     pointer::Pointer,
     value::{Value, ValueContent, ValueDatum},
-    BlockArgument,
+    BlockArgument, TypeContent,
 };
 
 /// Inline all calls made from a specific function, effectively removing all `Call` instructions.
@@ -89,29 +89,21 @@ pub fn is_small_fn(
 ) -> impl Fn(&Context, &Function, &Value) -> bool {
     fn count_type_elements(context: &Context, ty: &Type) -> usize {
         // This is meant to just be a heuristic rather than be super accurate.
-        match ty {
-            Type::Unit
-            | Type::Bool
-            | Type::Uint(_)
-            | Type::B256
-            | Type::String(_)
-            | Type::Pointer(_)
-            | Type::Slice => 1,
-            Type::Array(aggregate) => {
-                let (ty, sz) = context.aggregates[aggregate.0].array_type();
-                count_type_elements(context, ty) * *sz as usize
-            }
-            Type::Union(aggregate) => context.aggregates[aggregate.0]
-                .field_types()
+        match &*ty.get_content(context) {
+            TypeContent::Unit
+            | TypeContent::Bool
+            | TypeContent::Uint(_)
+            | TypeContent::B256
+            | TypeContent::String(_)
+            | TypeContent::Pointer(_)
+            | TypeContent::Slice => 1,
+            TypeContent::Array(ty, sz) => count_type_elements(context, &ty) * *sz as usize,
+            TypeContent::Union(tys) => tys
                 .iter()
                 .map(|ty| count_type_elements(context, ty))
                 .max()
                 .unwrap_or(1),
-            Type::Struct(aggregate) => context.aggregates[aggregate.0]
-                .field_types()
-                .iter()
-                .map(|ty| count_type_elements(context, ty))
-                .sum(),
+            TypeContent::Struct(tys) => tys.iter().map(|ty| count_type_elements(context, ty)).sum(),
         }
     }
 
@@ -373,20 +365,11 @@ fn inline_instruction(
                 map_value(asset_id),
                 map_value(gas),
             ),
-            Instruction::ExtractElement {
-                array,
-                ty,
-                index_val,
-            } => new_block
-                .ins(context)
-                .extract_element(map_value(array), ty, map_value(index_val)),
-            Instruction::ExtractValue {
-                aggregate,
-                ty,
+            Instruction::GetElmPtr {
+                ptr,
+                pointee_ty,
                 indices,
-            } => new_block
-                .ins(context)
-                .extract_value(map_value(aggregate), ty, indices),
+            } => new_block.ins(context).get_elm_ptr(ptr, pointee_ty, indices),
             Instruction::GetStorageKey => new_block.ins(context).get_storage_key(),
             Instruction::GetPointer {
                 base_ptr,
@@ -401,28 +384,6 @@ fn inline_instruction(
             Instruction::Gtf { index, tx_field_id } => {
                 new_block.ins(context).gtf(map_value(index), tx_field_id)
             }
-            Instruction::InsertElement {
-                array,
-                ty,
-                value,
-                index_val,
-            } => new_block.ins(context).insert_element(
-                map_value(array),
-                ty,
-                map_value(value),
-                map_value(index_val),
-            ),
-            Instruction::InsertValue {
-                aggregate,
-                ty,
-                value,
-                indices,
-            } => new_block.ins(context).insert_value(
-                map_value(aggregate),
-                ty,
-                map_value(value),
-                indices,
-            ),
             Instruction::IntToPtr(value, ty) => {
                 new_block.ins(context).int_to_ptr(map_value(value), ty)
             }

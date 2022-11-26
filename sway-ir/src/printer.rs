@@ -13,7 +13,6 @@ use crate::{
     context::Context,
     function::{Function, FunctionContent},
     instruction::{Instruction, Predicate, Register},
-    irtype::Type,
     metadata::{MetadataIndex, Metadatum},
     module::{Kind, ModuleContent},
     value::{Value, ValueContent, ValueDatum},
@@ -470,35 +469,21 @@ fn instruction_to_doc<'a>(
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 )),
-            Instruction::ExtractElement {
-                array,
-                ty,
-                index_val,
-            } => maybe_constant_to_doc(context, md_namer, namer, index_val).append(Doc::line(
-                Doc::text(format!(
-                    "{} = extract_element {}, {}, {}",
-                    namer.name(context, ins_value),
-                    namer.name(context, array),
-                    Type::Array(*ty).as_string(context),
-                    namer.name(context, index_val),
-                ))
-                .append(md_namer.md_idx_to_doc(context, metadata)),
-            )),
-            Instruction::ExtractValue {
-                aggregate,
-                ty,
+            Instruction::GetElmPtr {
+                ptr,
+                pointee_ty,
                 indices,
-            } => maybe_constant_to_doc(context, md_namer, namer, aggregate).append(Doc::line(
+            } => maybe_constant_to_doc(context, md_namer, namer, ptr).append(Doc::line(
                 Doc::text(format!(
-                    "{} = extract_value {}, {}, ",
+                    "{} = get_elm_ptr {}, {}, ",
                     namer.name(context, ins_value),
-                    namer.name(context, aggregate),
-                    Type::Struct(*ty).as_string(context),
+                    namer.name(context, ptr),
+                    pointee_ty.as_string(context),
                 ))
                 .append(Doc::list_sep(
                     indices
                         .iter()
-                        .map(|idx| Doc::text(format!("{idx}")))
+                        .map(|idx| Doc::text(format!("{}", namer.name(context, idx))))
                         .collect(),
                     Doc::Comma,
                 ))
@@ -542,49 +527,6 @@ fn instruction_to_doc<'a>(
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 )
             }
-            Instruction::InsertElement {
-                array,
-                ty,
-                value,
-                index_val,
-            } => maybe_constant_to_doc(context, md_namer, namer, array)
-                .append(maybe_constant_to_doc(context, md_namer, namer, value))
-                .append(maybe_constant_to_doc(context, md_namer, namer, index_val))
-                .append(Doc::line(
-                    Doc::text(format!(
-                        "{} = insert_element {}, {}, {}, {}",
-                        namer.name(context, ins_value),
-                        namer.name(context, array),
-                        Type::Array(*ty).as_string(context),
-                        namer.name(context, value),
-                        namer.name(context, index_val),
-                    ))
-                    .append(md_namer.md_idx_to_doc(context, metadata)),
-                )),
-            Instruction::InsertValue {
-                aggregate,
-                ty,
-                value,
-                indices,
-            } => maybe_constant_to_doc(context, md_namer, namer, aggregate)
-                .append(maybe_constant_to_doc(context, md_namer, namer, value))
-                .append(Doc::line(
-                    Doc::text(format!(
-                        "{} = insert_value {}, {}, {}, ",
-                        namer.name(context, ins_value),
-                        namer.name(context, aggregate),
-                        Type::Struct(*ty).as_string(context),
-                        namer.name(context, value),
-                    ))
-                    .append(Doc::list_sep(
-                        indices
-                            .iter()
-                            .map(|idx| Doc::text(format!("{idx}")))
-                            .collect(),
-                        Doc::Comma,
-                    ))
-                    .append(md_namer.md_idx_to_doc(context, metadata)),
-                )),
             Instruction::IntToPtr(value, ty) => {
                 maybe_constant_to_doc(context, md_namer, namer, value).append(Doc::line(
                     Doc::text(format!(
