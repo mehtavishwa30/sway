@@ -446,7 +446,7 @@ impl<'ir> AsmBuilder<'ir> {
                     .insert_data_value(Entry::from_constant(self.context, constant));
                 self.ptr_map.insert(*ptr, Storage::Data(data_id));
             } else {
-                match *ptr.get_type(self.context).get_content(self.context) {
+                match &*ptr.get_type(self.context).get_content(self.context) {
                     TypeContent::Unit
                     | TypeContent::Bool
                     | TypeContent::Uint(_)
@@ -465,9 +465,7 @@ impl<'ir> AsmBuilder<'ir> {
                         self.ptr_map.insert(*ptr, Storage::Stack(stack_base));
                         stack_base += size_bytes_round_up_to_word_alignment!(n)
                     }
-                    ty @ (TypeContent::Array(..)
-                    | TypeContent::Struct(_)
-                    | TypeContent::Union(_)) => {
+                    TypeContent::Array(..) | TypeContent::Struct(_) | TypeContent::Union(_) => {
                         // Store this aggregate at the current stack base.
                         self.ptr_map.insert(*ptr, Storage::Stack(stack_base));
 

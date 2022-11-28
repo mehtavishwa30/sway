@@ -159,7 +159,7 @@ pub enum StateAccessType {
 }
 
 pub(crate) fn ir_type_size_in_bytes(context: &Context, ty: &Type) -> u64 {
-    match *ty.get_content(context) {
+    match &*ty.get_content(context) {
         TypeContent::Unit | TypeContent::Bool | TypeContent::Uint(_) | TypeContent::Pointer(_) => 8,
         TypeContent::B256 => 32,
         TypeContent::String(n) => size_bytes_round_up_to_word_alignment!(n),
@@ -189,7 +189,7 @@ pub(crate) fn aggregate_idcs_to_field_layout(
     idcs: &[u64],
 ) -> ((u64, u64), Type) {
     idcs.iter().fold(((0, 0), *ty), |((offs, _), ty), idx| {
-        match *ty.get_content(context) {
+        match &*ty.get_content(context) {
             TypeContent::Struct(field_types) => {
                 let idx = *idx as usize;
                 let field_type = field_types[idx];

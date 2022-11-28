@@ -60,7 +60,7 @@ pub fn serialize_to_storage_slots(
     ty: &Type,
     indices: &[usize],
 ) -> Vec<StorageSlot> {
-    match (*ty.get_content(context), &constant.value) {
+    match (&*ty.get_content(context), &constant.value) {
         (_, ConstantValue::Undef) => vec![],
         (TypeContent::Unit, ConstantValue::Unit) => vec![StorageSlot::new(
             get_storage_key(ix, indices),
@@ -156,7 +156,7 @@ pub fn serialize_to_storage_slots(
 /// words and add left padding up to size of `ty`.
 ///
 pub fn serialize_to_words(constant: &Constant, context: &Context, ty: &Type) -> Vec<Bytes8> {
-    match (*ty.get_content(context), &constant.value) {
+    match (&*ty.get_content(context), &constant.value) {
         (_, ConstantValue::Undef) => vec![],
         (TypeContent::Unit, ConstantValue::Unit) => vec![Bytes8::new([0; 8])],
         (TypeContent::Bool, ConstantValue::Bool(b)) => {

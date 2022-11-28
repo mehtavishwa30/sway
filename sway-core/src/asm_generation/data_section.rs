@@ -50,7 +50,7 @@ impl Entry {
         let size = Some(ir_type_size_in_bytes(context, &constant.ty) as usize);
 
         // Is this constant a tagged union?
-        if let TypeContent::Struct(field_tys) = *constant.ty.get_content(context) {
+        if let TypeContent::Struct(field_tys) = &*constant.ty.get_content(context) {
             if field_tys.len() == 2
                 && (field_tys[0].is_uint(context) && field_tys[1].is_union(context))
             {

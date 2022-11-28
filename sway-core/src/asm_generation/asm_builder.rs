@@ -164,14 +164,11 @@ impl<'ir> AsmBuilder<'ir> {
                     gas,
                     ..
                 } => self.compile_contract_call(instr_val, params, coins, asset_id, gas),
-                Instruction::ExtractElement {
-                    array,
-                    ty,
-                    index_val,
-                } => self.compile_extract_element(instr_val, array, ty, index_val),
-                Instruction::ExtractValue {
-                    aggregate, indices, ..
-                } => self.compile_extract_value(instr_val, aggregate, indices),
+                Instruction::GetElmPtr {
+                    ptr,
+                    pointee_ty,
+                    indices,
+                } => self.compile_get_element_ptr(instr_val, ptr, pointee_ty, indices),
                 Instruction::GetStorageKey => {
                     check!(
                         self.compile_get_storage_key(instr_val),
@@ -188,18 +185,6 @@ impl<'ir> AsmBuilder<'ir> {
                 Instruction::Gtf { index, tx_field_id } => {
                     self.compile_gtf(instr_val, index, *tx_field_id)
                 }
-                Instruction::InsertElement {
-                    array,
-                    ty,
-                    value,
-                    index_val,
-                } => self.compile_insert_element(instr_val, array, ty, value, index_val),
-                Instruction::InsertValue {
-                    aggregate,
-                    value,
-                    indices,
-                    ..
-                } => self.compile_insert_value(instr_val, aggregate, value, indices),
                 Instruction::IntToPtr(val, _) => self.compile_int_to_ptr(instr_val, val),
                 Instruction::Load(src_val) => check!(
                     self.compile_load(instr_val, src_val),
@@ -427,7 +412,7 @@ impl<'ir> AsmBuilder<'ir> {
 
     fn compile_bitcast(&mut self, instr_val: &Value, bitcast_val: &Value, to_type: &Type) {
         let val_reg = self.value_to_register(bitcast_val);
-        let reg = if let Type::Bool = to_type {
+        let reg = if to_type.is_bool(self.context) {
             // This may not be necessary if we just treat a non-zero value as 'true'.
             let res_reg = self.reg_seqr.next();
             self.cur_bytecode.push(Op {
@@ -595,187 +580,162 @@ impl<'ir> AsmBuilder<'ir> {
         self.reg_map.insert(*instr_val, instr_reg);
     }
 
-    fn compile_extract_element(
+    fn compile_get_element_ptr(
         &mut self,
         instr_val: &Value,
-        array: &Value,
-        ty: &Aggregate,
-        index_val: &Value,
+        ptr: &Value,
+        pointee_ty: &Type,
+        indices: &[Value],
     ) {
-        // Base register should pointer to some stack allocated memory.
-        let base_reg = self.value_to_register(array);
+        // NOTE: The first index is a zero, to derefence the pointer itself.  Currently redundant
+        // but may be useful in the future.  (Modeled after the LLVM GEP.)
 
-        // Index value is the array element index, not byte nor word offset.
-        let index_reg = self.value_to_register(index_val);
-        let rel_offset_reg = self.reg_seqr.next();
-
-        // We could put the OOB check here, though I'm now thinking it would be too wasteful.
-        // See compile_bounds_assertion() in expression/array.rs (or look in Git history).
+        let base_reg = self.value_to_register(ptr);
 
         let instr_reg = self.reg_seqr.next();
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        let elem_type = ty.get_elem_type(self.context).unwrap();
-        let elem_size = ir_type_size_in_bytes(self.context, &elem_type);
-        if elem_type.is_copy_type(self.context) {
-            self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::MULI(
-                    rel_offset_reg.clone(),
-                    index_reg,
-                    VirtualImmediate12 { value: 8 },
-                )),
-                comment: "extract_element relative offset".into(),
-                owning_span: owning_span.clone(),
-            });
-            let elem_offs_reg = self.reg_seqr.next();
-            self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::ADD(
-                    elem_offs_reg.clone(),
-                    base_reg,
-                    rel_offset_reg,
-                )),
-                comment: "extract_element absolute offset".into(),
-                owning_span: owning_span.clone(),
-            });
-            self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::LW(
-                    instr_reg.clone(),
-                    elem_offs_reg,
-                    VirtualImmediate12 { value: 0 },
-                )),
-                comment: "extract_element".into(),
-                owning_span,
-            });
-        } else {
-            // Value too big for a register, so we return the memory offset.
-            if elem_size > compiler_constants::TWELVE_BITS {
-                let size_data_id = self
-                    .data_section
-                    .insert_data_value(Entry::new_word(elem_size, None));
-                let size_reg = self.reg_seqr.next();
+        if pointee_ty.is_struct(self.context) {
+            // For a struct the indices are all constant u64s.
+            let indices = indices
+                .iter()
+                .map(|idx_val| {
+                    idx_val
+                        .get_constant(self.context)
+                        .and_then(|constant| {
+                            if let ConstantValue::Uint(idx) = &constant.value {
+                                Some(*idx)
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| {
+                            unreachable!("GEP indices into structs must be const u64s.")
+                        })
+                })
+                .collect::<Vec<_>>();
+
+            let ((field_offset, _), _) =
+                aggregate_idcs_to_field_layout(self.context, pointee_ty, &indices[1..]);
+
+            if field_offset <= compiler_constants::TWELVE_BITS {
+                // Do an immediate add of the offset to the base register.
                 self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::LWDataId(size_reg.clone(), size_data_id)),
-                    owning_span: owning_span.clone(),
-                    comment: "loading element size for relative offset".into(),
-                });
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::MUL(instr_reg.clone(), index_reg, size_reg)),
-                    comment: "extract_element relative offset".into(),
-                    owning_span: owning_span.clone(),
+                    opcode: Either::Left(VirtualOp::ADDI(
+                        instr_reg.clone(),
+                        base_reg,
+                        VirtualImmediate12 {
+                            value: field_offset as u16,
+                        },
+                    )),
+                    comment: "GEP offset to field".into(),
+                    owning_span: None,
                 });
             } else {
+                // Do a register add of the offset to the base register.
+                let offs_reg = self.reg_seqr.next();
+                if field_offset <= compiler_constants::EIGHTEEN_BITS {
+                    // Move the offset in.
+                    self.cur_bytecode.push(Op {
+                        opcode: Either::Left(VirtualOp::MOVI(
+                            offs_reg.clone(),
+                            VirtualImmediate18 {
+                                value: field_offset as u32,
+                            },
+                        )),
+                        comment: "GEP offset to field".into(),
+                        owning_span: None,
+                    });
+                } else {
+                    // Load the offset from the data section.
+                    let data_id = self
+                        .data_section
+                        .insert_data_value(Entry::new_word(field_offset, None));
+
+                    self.cur_bytecode.push(Op {
+                        opcode: either::Either::Left(VirtualOp::LWDataId(
+                            offs_reg.clone(),
+                            data_id,
+                        )),
+                        comment: "load GEP offset to field".into(),
+                        owning_span: None,
+                    });
+                }
+
+                self.cur_bytecode.push(Op {
+                    opcode: Either::Left(VirtualOp::ADD(instr_reg.clone(), base_reg, offs_reg)),
+                    comment: String::new(),
+                    owning_span: None,
+                });
+            }
+        } else if pointee_ty.is_array(self.context) {
+            let elem_size = pointee_ty
+                .get_array_elem_type(self.context)
+                .map(|elem_ty| ir_type_size_in_bytes(self.context, &elem_ty))
+                .unwrap_or_else(|| {
+                    unreachable!("Unable to get array element type for confirmed array type.")
+                });
+
+            assert!(indices.len() == 2);
+            let index_reg = self.value_to_register(&indices[1]);
+
+            // `tmp_reg` is the relative offset to the element within the array.
+            let tmp_reg = self.reg_seqr.next();
+            if elem_size <= compiler_constants::TWELVE_BITS {
+                // Do an immediate mul of index by size.
                 self.cur_bytecode.push(Op {
                     opcode: Either::Left(VirtualOp::MULI(
-                        instr_reg.clone(),
+                        tmp_reg.clone(),
                         index_reg,
                         VirtualImmediate12 {
                             value: elem_size as u16,
                         },
                     )),
-                    comment: "extract_element relative offset".into(),
-                    owning_span: owning_span.clone(),
+                    comment: "GEP offset to element".into(),
+                    owning_span: None,
+                });
+            } else {
+                // Do a register mul of index by size.
+                let size_reg = self.reg_seqr.next();
+                if elem_size <= compiler_constants::EIGHTEEN_BITS {
+                    // Move the size into a register.
+                    self.cur_bytecode.push(Op {
+                        opcode: Either::Left(VirtualOp::MOVI(
+                            size_reg.clone(),
+                            VirtualImmediate18 {
+                                value: elem_size as u32,
+                            },
+                        )),
+                        comment: "GEP element size".into(),
+                        owning_span: None,
+                    });
+                } else {
+                    // Load the size from the data section.
+                    let data_id = self
+                        .data_section
+                        .insert_data_value(Entry::new_word(elem_size, None));
+                    self.cur_bytecode.push(Op {
+                        opcode: either::Either::Left(VirtualOp::LWDataId(
+                            size_reg.clone(),
+                            data_id,
+                        )),
+                        comment: "load GEP element size".into(),
+                        owning_span: None,
+                    });
+                }
+
+                self.cur_bytecode.push(Op {
+                    opcode: Either::Left(VirtualOp::MUL(tmp_reg.clone(), index_reg, size_reg)),
+                    comment: "GEP offset to element".into(),
+                    owning_span: None,
                 });
             }
+
             self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::ADD(
-                    instr_reg.clone(),
-                    base_reg,
-                    instr_reg.clone(),
-                )),
-                comment: "extract_element absolute offset".into(),
-                owning_span,
+                opcode: Either::Left(VirtualOp::ADD(instr_reg.clone(), base_reg, tmp_reg)),
+                comment: String::new(),
+                owning_span: None,
             });
-        }
-
-        self.reg_map.insert(*instr_val, instr_reg);
-    }
-
-    fn compile_extract_value(&mut self, instr_val: &Value, aggregate_val: &Value, indices: &[u64]) {
-        // Base register should pointer to some stack allocated memory.
-        let base_reg = self.value_to_register(aggregate_val);
-        let ((extract_offset, _), field_type) = aggregate_idcs_to_field_layout(
-            self.context,
-            &aggregate_val.get_stripped_ptr_type(self.context).unwrap(),
-            indices,
-        );
-
-        let instr_reg = self.reg_seqr.next();
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        if field_type.is_copy_type(self.context) {
-            if extract_offset > compiler_constants::TWELVE_BITS {
-                let offset_reg = self.reg_seqr.next();
-                self.number_to_reg(extract_offset, &offset_reg, owning_span.clone());
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::ADD(
-                        offset_reg.clone(),
-                        base_reg.clone(),
-                        base_reg,
-                    )),
-                    comment: "add array base to offset".into(),
-                    owning_span: owning_span.clone(),
-                });
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::LW(
-                        instr_reg.clone(),
-                        offset_reg,
-                        VirtualImmediate12 { value: 0 },
-                    )),
-                    comment: format!(
-                        "extract_value @ {}",
-                        indices
-                            .iter()
-                            .map(|idx| format!("{}", idx))
-                            .collect::<Vec<String>>()
-                            .join(",")
-                    ),
-                    owning_span,
-                });
-            } else {
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::LW(
-                        instr_reg.clone(),
-                        base_reg,
-                        VirtualImmediate12 {
-                            value: extract_offset as u16,
-                        },
-                    )),
-                    comment: format!(
-                        "extract_value @ {}",
-                        indices
-                            .iter()
-                            .map(|idx| format!("{}", idx))
-                            .collect::<Vec<String>>()
-                            .join(",")
-                    ),
-                    owning_span,
-                });
-            }
         } else {
-            // Value too big for a register, so we return the memory offset.
-            if extract_offset * 8 > compiler_constants::TWELVE_BITS {
-                let offset_reg = self.reg_seqr.next();
-                self.number_to_reg(extract_offset * 8, &offset_reg, owning_span.clone());
-                self.cur_bytecode.push(Op {
-                    opcode: either::Either::Left(VirtualOp::ADD(
-                        instr_reg.clone(),
-                        base_reg,
-                        offset_reg,
-                    )),
-                    comment: "extract address".into(),
-                    owning_span,
-                });
-            } else {
-                self.cur_bytecode.push(Op {
-                    opcode: either::Either::Left(VirtualOp::ADDI(
-                        instr_reg.clone(),
-                        base_reg,
-                        VirtualImmediate12 {
-                            value: (extract_offset * 8) as u16,
-                        },
-                    )),
-                    comment: "extract address".into(),
-                    owning_span,
-                });
-            }
+            unreachable!("GEP pointer must be to an aggregate.")
         }
 
         self.reg_map.insert(*instr_val, instr_reg);
@@ -890,217 +850,6 @@ impl<'ir> AsmBuilder<'ir> {
             owning_span: self.md_mgr.val_to_span(self.context, *instr_val),
         });
         self.reg_map.insert(*instr_val, instr_reg);
-    }
-
-    fn compile_insert_element(
-        &mut self,
-        instr_val: &Value,
-        array: &Value,
-        ty: &Aggregate,
-        value: &Value,
-        index_val: &Value,
-    ) {
-        // Base register should point to some stack allocated memory.
-        let base_reg = self.value_to_register(array);
-        let insert_reg = self.value_to_register(value);
-
-        // Index value is the array element index, not byte nor word offset.
-        let index_reg = self.value_to_register(index_val);
-        let rel_offset_reg = self.reg_seqr.next();
-
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-
-        let elem_type = ty.get_elem_type(self.context).unwrap();
-        let elem_size = ir_type_size_in_bytes(self.context, &elem_type);
-        if elem_type.is_copy_type(self.context) {
-            self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::MULI(
-                    rel_offset_reg.clone(),
-                    index_reg,
-                    VirtualImmediate12 { value: 8 },
-                )),
-                comment: "insert_element relative offset".into(),
-                owning_span: owning_span.clone(),
-            });
-            let elem_offs_reg = self.reg_seqr.next();
-            self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::ADD(
-                    elem_offs_reg.clone(),
-                    base_reg.clone(),
-                    rel_offset_reg,
-                )),
-                comment: "insert_element absolute offset".into(),
-                owning_span: owning_span.clone(),
-            });
-            self.cur_bytecode.push(Op {
-                opcode: Either::Left(VirtualOp::SW(
-                    elem_offs_reg,
-                    insert_reg,
-                    VirtualImmediate12 { value: 0 },
-                )),
-                comment: "insert_element".into(),
-                owning_span,
-            });
-        } else {
-            // Element size is larger than 8; we switch to bytewise offsets and sizes and use MCP.
-            if elem_size > compiler_constants::TWELVE_BITS {
-                todo!("array element size bigger than 4k")
-            } else {
-                let elem_index_offs_reg = self.reg_seqr.next();
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::MULI(
-                        elem_index_offs_reg.clone(),
-                        index_reg,
-                        VirtualImmediate12 {
-                            value: elem_size as u16,
-                        },
-                    )),
-                    comment: "insert_element relative offset".into(),
-                    owning_span: owning_span.clone(),
-                });
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::ADD(
-                        elem_index_offs_reg.clone(),
-                        base_reg.clone(),
-                        elem_index_offs_reg.clone(),
-                    )),
-                    comment: "insert_element absolute offset".into(),
-                    owning_span: owning_span.clone(),
-                });
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::MCPI(
-                        elem_index_offs_reg,
-                        insert_reg,
-                        VirtualImmediate12 {
-                            value: elem_size as u16,
-                        },
-                    )),
-                    comment: "insert_element store value".into(),
-                    owning_span,
-                });
-            }
-        }
-
-        // We set the 'instruction' register to the base register, so that cascading inserts will
-        // work.
-        self.reg_map.insert(*instr_val, base_reg);
-    }
-
-    fn compile_insert_value(
-        &mut self,
-        instr_val: &Value,
-        aggregate_val: &Value,
-        value: &Value,
-        indices: &[u64],
-    ) {
-        // Base register should point to some stack allocated memory.
-        let base_reg = self.value_to_register(aggregate_val);
-
-        let insert_reg = self.value_to_register(value);
-        let ((mut insert_offs, field_size_in_bytes), field_type) = aggregate_idcs_to_field_layout(
-            self.context,
-            &aggregate_val.get_stripped_ptr_type(self.context).unwrap(),
-            indices,
-        );
-
-        let value_type = value.get_stripped_ptr_type(self.context).unwrap();
-        let value_size_in_bytes = ir_type_size_in_bytes(self.context, &value_type);
-        let value_size_in_words = size_bytes_in_words!(value_size_in_bytes);
-
-        // Account for the padding if the final field type is a union and the value we're trying to
-        // insert is smaller than the size of the union (i.e. we're inserting a small variant).
-        if matches!(field_type, Type::Union(_)) {
-            let field_size_in_words = size_bytes_in_words!(field_size_in_bytes);
-            assert!(field_size_in_words >= value_size_in_words);
-            insert_offs += field_size_in_words - value_size_in_words;
-        }
-
-        let indices_str = indices
-            .iter()
-            .map(|idx| format!("{}", idx))
-            .collect::<Vec<String>>()
-            .join(",");
-
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-
-        if value_type.is_copy_type(self.context) {
-            if insert_offs > compiler_constants::TWELVE_BITS {
-                let insert_offs_reg = self.reg_seqr.next();
-                self.number_to_reg(insert_offs, &insert_offs_reg, owning_span.clone());
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::ADD(
-                        base_reg.clone(),
-                        base_reg.clone(),
-                        insert_offs_reg,
-                    )),
-                    comment: "insert_value absolute offset".into(),
-                    owning_span: owning_span.clone(),
-                });
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::SW(
-                        base_reg.clone(),
-                        insert_reg,
-                        VirtualImmediate12 { value: 0 },
-                    )),
-                    comment: format!("insert_value @ {}", indices_str),
-                    owning_span,
-                });
-            } else {
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::SW(
-                        base_reg.clone(),
-                        insert_reg,
-                        VirtualImmediate12 {
-                            value: insert_offs as u16,
-                        },
-                    )),
-                    comment: format!("insert_value @ {}", indices_str),
-                    owning_span,
-                });
-            }
-        } else {
-            let offs_reg = self.reg_seqr.next();
-            if insert_offs * 8 > compiler_constants::TWELVE_BITS {
-                self.number_to_reg(insert_offs * 8, &offs_reg, owning_span.clone());
-            } else {
-                self.cur_bytecode.push(Op {
-                    opcode: either::Either::Left(VirtualOp::ADDI(
-                        offs_reg.clone(),
-                        base_reg.clone(),
-                        VirtualImmediate12 {
-                            value: (insert_offs * 8) as u16,
-                        },
-                    )),
-                    comment: format!("get struct field(s) {} offset", indices_str),
-                    owning_span: owning_span.clone(),
-                });
-            }
-            if value_size_in_bytes > compiler_constants::TWELVE_BITS {
-                let size_reg = self.reg_seqr.next();
-                self.number_to_reg(value_size_in_bytes, &size_reg, owning_span.clone());
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::MCP(offs_reg, insert_reg, size_reg)),
-                    comment: "store struct field value".into(),
-                    owning_span,
-                });
-            } else {
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::MCPI(
-                        offs_reg,
-                        insert_reg,
-                        VirtualImmediate12 {
-                            value: value_size_in_bytes as u16,
-                        },
-                    )),
-                    comment: "store struct field value".into(),
-                    owning_span,
-                });
-            }
-        }
-
-        // We set the 'instruction' register to the base register, so that cascading inserts will
-        // work.
-        self.reg_map.insert(*instr_val, base_reg);
     }
 
     fn compile_int_to_ptr(&mut self, instr_val: &Value, int_to_ptr_val: &Value) {
@@ -1410,8 +1159,12 @@ impl<'ir> AsmBuilder<'ir> {
         access_type: StateAccessType,
     ) -> CompileResult<()> {
         // Make sure that both val and key are pointers to B256.
-        assert!(val.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
-        assert!(key.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
+        assert!(val
+            .get_stripped_ptr_type(self.context)
+            .map_or_else(|| false, |t| t.is_b256(self.context)));
+        assert!(key
+            .get_stripped_ptr_type(self.context)
+            .map_or_else(|| false, |t| t.is_b256(self.context)));
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
 
         let key_ptr = self.resolve_ptr(key);
@@ -1422,7 +1175,9 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
+        assert!(ptr_ty
+            .get_type(self.context)
+            .eq(self.context, &Type::get_b256(self.context)));
 
         let val_reg = if matches!(
             val.get_instruction(self.context),
@@ -1440,7 +1195,9 @@ impl<'ir> AsmBuilder<'ir> {
             }
             let (val_ptr, ptr_ty, offset) = val_ptr.value.unwrap();
             // Expect the ptr_ty for val to also be B256
-            assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
+            assert!(ptr_ty
+                .get_type(self.context)
+                .eq(self.context, &Type::get_b256(self.context)));
             match self.ptr_map.get(&val_ptr) {
                 Some(Storage::Stack(val_offset)) => {
                     let base_reg = self.locals_base_reg().clone();
@@ -1473,7 +1230,9 @@ impl<'ir> AsmBuilder<'ir> {
 
     fn compile_state_load_word(&mut self, instr_val: &Value, key: &Value) -> CompileResult<()> {
         // Make sure that the key is a pointers to B256.
-        assert!(key.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
+        assert!(key
+            .get_stripped_ptr_type(self.context)
+            .map_or_else(|| false, |t| t.is_b256(self.context)));
 
         let key_ptr = self.resolve_ptr(key);
         if key_ptr.value.is_none() {
@@ -1483,7 +1242,9 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
+        assert!(ptr_ty
+            .get_type(self.context)
+            .eq(self.context, &Type::get_b256(self.context)));
 
         let load_reg = self.reg_seqr.next();
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
@@ -1514,10 +1275,14 @@ impl<'ir> AsmBuilder<'ir> {
         key: &Value,
     ) -> CompileResult<()> {
         // Make sure that key is a pointer to B256.
-        assert!(key.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
+        assert!(key
+            .get_stripped_ptr_type(self.context)
+            .map_or_else(|| false, |t| t.is_b256(self.context)));
 
         // Make sure that store_val is a U64 value.
-        assert!(store_val.get_stripped_ptr_type(self.context).map_or_else(|| false, |t| t.is_b256(self.context)));
+        assert!(store_val
+            .get_stripped_ptr_type(self.context)
+            .map_or_else(|| false, |t| t.is_b256(self.context)));
         let store_reg = self.value_to_register(store_val);
 
         // Expect the get_ptr here to have type b256 and offset = 0???
@@ -1529,7 +1294,9 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).eq(self.context, &Type::get_b256(self.context)));
+        assert!(ptr_ty
+            .get_type(self.context)
+            .eq(self.context, &Type::get_b256(self.context)));
 
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
         match self.ptr_map.get(&key_ptr) {
