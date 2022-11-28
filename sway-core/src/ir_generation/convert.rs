@@ -107,11 +107,11 @@ fn convert_resolved_type(
                 .as_slice(),
         )?,
         TypeInfo::Enum { variant_types, .. } => {
-            create_enum_aggregate(type_engine, context, variant_types.clone())?
+            create_enum_aggregate(type_engine, context, &variant_types)?
         }
-        TypeInfo::Array(elem_type, length, _) => {
+        TypeInfo::Array(elem_type, length) => {
             let elem_type = convert_resolved_typeid(type_engine, context, &elem_type.type_id, span)?;
-            Type::get_array(context, elem_type, *length as u64)
+            Type::get_array(context, elem_type, length.val() as u64)
         }
         TypeInfo::Tuple(fields) => {
             if fields.is_empty() {
@@ -125,7 +125,7 @@ fn convert_resolved_type(
             }
         }
         TypeInfo::RawUntypedPtr => Type::get_uint(context, 64),
-        TypeInfo::RawUntypedSlice => Type::Slice,
+        TypeInfo::RawUntypedSlice => Type::get_slice(context),
 
         // Unsupported types which shouldn't exist in the AST after type checking and
         // monomorphisation.

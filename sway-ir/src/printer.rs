@@ -266,10 +266,15 @@ fn constant_to_doc(
         metadata,
     } = &context.values[const_val.0]
     {
+        let is_ptr = const_val
+            .get_type(context)
+            .map(|ty| ty.is_ptr_type(context))
+            .unwrap_or(false);
         Doc::line(
             Doc::text(format!(
-                "{} = const {}",
+                "{} = const {}{}",
                 namer.name(context, const_val),
+                if is_ptr { "ptr " } else { "" },
                 constant.as_lit_string(context)
             ))
             .append(md_namer.md_idx_to_doc(context, metadata)),
@@ -473,22 +478,29 @@ fn instruction_to_doc<'a>(
                 ptr,
                 pointee_ty,
                 indices,
-            } => maybe_constant_to_doc(context, md_namer, namer, ptr).append(Doc::line(
-                Doc::text(format!(
-                    "{} = get_elm_ptr {}, {}, ",
-                    namer.name(context, ins_value),
-                    namer.name(context, ptr),
-                    pointee_ty.as_string(context),
+            } => {
+                // Print consts if any first.
+                let consts = indices.iter().fold(
+                    maybe_constant_to_doc(context, md_namer, namer, ptr),
+                    |accum, idx| accum.append(maybe_constant_to_doc(context, md_namer, namer, idx)),
+                );
+                consts.append(Doc::line(
+                    Doc::text(format!(
+                        "{} = get_elem_ptr {}, {}, ",
+                        namer.name(context, ins_value),
+                        pointee_ty.as_string(context),
+                        namer.name(context, ptr),
+                    ))
+                    .append(Doc::list_sep(
+                        indices
+                            .iter()
+                            .map(|idx| Doc::text(format!("{}", namer.name(context, idx))))
+                            .collect(),
+                        Doc::Comma,
+                    ))
+                    .append(md_namer.md_idx_to_doc(context, metadata)),
                 ))
-                .append(Doc::list_sep(
-                    indices
-                        .iter()
-                        .map(|idx| Doc::text(format!("{}", namer.name(context, idx))))
-                        .collect(),
-                    Doc::Comma,
-                ))
-                .append(md_namer.md_idx_to_doc(context, metadata)),
-            )),
+            }
             Instruction::GetStorageKey => Doc::line(
                 Doc::text(format!(
                     "{} = get_storage_key",
@@ -521,7 +533,7 @@ fn instruction_to_doc<'a>(
                         "{} = get_ptr {}, {}, {}",
                         namer.name(context, ins_value),
                         base_ptr.as_string(context, Some(name)),
-                        ptr_ty.as_string(context, None),
+                        ptr_ty.as_string(context),
                         offset,
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
@@ -578,6 +590,16 @@ fn instruction_to_doc<'a>(
                 Doc::text(format!("{} = nop", namer.name(context, ins_value)))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
             ),
+            Instruction::PtrToInt(ptr_val) => {
+                maybe_constant_to_doc(context, md_namer, namer, ptr_val).append(Doc::line(
+                    Doc::text(format!(
+                        "{} = ptr_to_int {}",
+                        namer.name(context, ins_value),
+                        namer.name(context, ptr_val),
+                    ))
+                    .append(md_namer.md_idx_to_doc(context, metadata)),
+                ))
+            }
             Instruction::ReadRegister(reg) => Doc::line(
                 Doc::text(format!(
                     "{} = read_register {}",

@@ -310,10 +310,10 @@ impl<'ir> AsmBuilder<'ir> {
                         }
 
                         // The base is an offset.  Dereference it.
-                        if val
+                        if !val
                             .get_type(self.context)
                             .unwrap()
-                            .is_copy_type(self.context)
+                            .is_ptr_type(self.context)
                         {
                             self.cur_bytecode.push(Op {
                                 opcode: either::Either::Left(VirtualOp::LW(
@@ -348,7 +348,9 @@ impl<'ir> AsmBuilder<'ir> {
                     let current_arg_reg = self.value_to_register(val);
                     let arg_type = val.get_type(self.context).unwrap();
                     let arg_type_size_bytes = ir_type_size_in_bytes(self.context, &arg_type);
-                    if arg_type.is_copy_type(self.context) {
+                    // XXX THIS WORRIES ME -- we need to make sure that ref type values are using
+                    // ptr types.
+                    if !arg_type.is_ptr_type(self.context) {
                         if arg_word_offset > compiler_constants::TWELVE_BITS {
                             let offs_reg = self.reg_seqr.next();
                             self.cur_bytecode.push(Op {
@@ -600,7 +602,7 @@ impl<'ir> AsmBuilder<'ir> {
                     .insert_data_value(Entry::from_constant(self.context, constant));
                 self.ptr_map.insert(*ptr, Storage::Data(data_id));
             } else {
-                match *ptr.get_type(self.context).get_content(self.context) {
+                match &*ptr.get_type(self.context).get_content(self.context) {
                     TypeContent::Unit
                     | TypeContent::Bool
                     | TypeContent::Uint(_)
@@ -623,16 +625,14 @@ impl<'ir> AsmBuilder<'ir> {
                         self.ptr_map.insert(*ptr, Storage::Stack(stack_base));
                         stack_base += size_bytes_round_up_to_word_alignment!(n)
                     }
-                    ty @ (TypeContent::Array(..)
-                    | TypeContent::Struct(_)
-                    | TypeContent::Union(_)) => {
+                    TypeContent::Array(..) | TypeContent::Struct(_) | TypeContent::Union(_) => {
                         // Store this aggregate at the current stack base.
                         self.ptr_map.insert(*ptr, Storage::Stack(stack_base));
 
                         // Reserve space by incrementing the base.
                         stack_base += size_bytes_in_words!(ir_type_size_in_bytes(
                             self.context,
-                            ptr.get_type(self.context)
+                            &ptr.get_type(self.context)
                         ));
                     }
                 };

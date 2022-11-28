@@ -72,7 +72,7 @@ pub enum Instruction {
     /// Return a pointer as a value.
     GetPointer {
         base_ptr: Pointer,
-        ptr_ty: Pointer,
+        ptr_ty: Type,
         offset: u64,
     },
     /// Address computation instruction. See LLVM's GetElementPtr instruction.
@@ -99,6 +99,8 @@ pub enum Instruction {
     },
     /// No-op, handy as a placeholder instruction.
     Nop,
+    /// Re-interpret a pointer value as a `u64`.
+    PtrToInt(Value),
     /// Reads a special register in the VM.
     ReadRegister(Register),
     /// Return from a function.
@@ -204,6 +206,7 @@ impl Instruction {
             Instruction::Cmp(..) => Some(Type::get_bool(context)),
             Instruction::ContractCall { return_type, .. } => Some(*return_type),
             Instruction::GetStorageKey => Some(Type::get_b256(context)),
+            Instruction::IntToPtr(_, ty) => Some(*ty),
             Instruction::Load(ptr_val) => match &context.values[ptr_val.0].value {
                 ValueDatum::Argument(arg) => Some(arg.ty.strip_ptr_type(context)),
                 ValueDatum::Constant(cons) => Some(cons.ty.strip_ptr_type(context)),
@@ -215,13 +218,12 @@ impl Instruction {
             // These are a `u64`.
             Instruction::AddrOf(_)
             | Instruction::Gtf { .. }
+            | Instruction::PtrToInt(_)
             | Instruction::ReadRegister(_)
             | Instruction::StateLoadWord(_) => Some(Type::get_uint(context, 64)),
 
             // These can be recursed to via Load, so we return the pointer type.
-            Instruction::GetPointer { ptr_ty, .. } => {
-                Some(Type::get_pointer(context, *ptr_ty.get_type(context)))
-            }
+            Instruction::GetPointer { ptr_ty, .. } => Some(*ptr_ty),
             Instruction::GetElmPtr {
                 ptr: _,
                 pointee_ty,
@@ -230,11 +232,8 @@ impl Instruction {
                 let ty = pointee_ty
                     .get_indexed_type(context, indices)
                     .expect("GetElmPtr indexing error");
-                Some(Type::get_pointer(context, Type::get_pointer(context, ty)))
+                Some(Type::get_pointer(context, ty))
             }
-
-            // Used to re-interpret an integer as a pointer to some type so return the pointer type.
-            Instruction::IntToPtr(_, ty) => Some(*ty),
 
             // Statements which have a Unit type.
             Instruction::Log { .. }
@@ -257,15 +256,16 @@ impl Instruction {
     /// Some [`Instruction`]s may have struct arguments.  Return it if so for this instruction.
     pub fn get_aggregate(&self, context: &Context) -> Option<Type> {
         let ty = match self {
-            Instruction::Call(func, _args) => Some(&context.functions[func.0].return_type),
-            Instruction::GetPointer { ptr_ty, .. } => Some(ptr_ty.get_type(context)),
+            Instruction::Call(func, _args) => Some(context.functions[func.0].return_type),
+            Instruction::GetPointer { ptr_ty, .. } => Some(ptr_ty.strip_ptr_type(context)),
+            Instruction::GetElmPtr { .. } => self.gep_indexed_type(context),
             // Unknown aggregate instruction.  Adding these as we come across them...
             _otherwise => None,
         };
         if let Some(ty) = ty {
             // TODO: Rewrite using if-let chain.
-            if ty.is_array(context) && ty.is_struct(context) {
-                Some(*ty)
+            if ty.is_array(context) || ty.is_struct(context) {
+                Some(ty)
             } else {
                 None
             }
@@ -328,6 +328,7 @@ impl Instruction {
                 log_val, log_id, ..
             } => vec![*log_val, *log_id],
             Instruction::Nop => vec![],
+            Instruction::PtrToInt(..) => vec![],
             Instruction::ReadRegister(_) => vec![],
             Instruction::Ret(v, _) => vec![*v],
             Instruction::Revert(v) => vec![*v],
@@ -422,6 +423,7 @@ impl Instruction {
                 replace(src_val);
             }
             Instruction::Nop => (),
+            Instruction::PtrToInt(..) => (),
             Instruction::ReadRegister { .. } => (),
             Instruction::Ret(ret_val, _) => replace(ret_val),
             Instruction::Revert(revert_val) => replace(revert_val),
@@ -476,23 +478,25 @@ impl Instruction {
             | Instruction::StateStoreQuadWord { .. }
             | Instruction::StateStoreWord { .. }
             | Instruction::Store { .. } => true,
+
             Instruction::AddrOf(_)
-            | Instruction::BitCast(..)
             | Instruction::BinaryOp { .. }
+            | Instruction::BitCast(..)
+            | Instruction::Branch(_)
             | Instruction::Cmp(..)
+            | Instruction::ConditionalBranch { .. }
             | Instruction::GetElmPtr { .. }
+            | Instruction::GetPointer { .. }
             | Instruction::GetStorageKey
             | Instruction::Gtf { .. }
-            | Instruction::Load(_)
-            | Instruction::ReadRegister(_)
-            | Instruction::StateLoadWord(_)
-            | Instruction::GetPointer { .. }
             | Instruction::IntToPtr(..)
-            | Instruction::Branch(_)
-            | Instruction::ConditionalBranch { .. }
+            | Instruction::Load(_)
+            | Instruction::Nop
+            | Instruction::PtrToInt(..)
+            | Instruction::ReadRegister(_)
             | Instruction::Ret(..)
             | Instruction::Revert(..)
-            | Instruction::Nop => false,
+            | Instruction::StateLoadWord(_) => false,
         }
     }
 
@@ -504,6 +508,17 @@ impl Instruction {
                 | Instruction::Ret(..)
                 | Instruction::Revert(..)
         )
+    }
+
+    pub fn gep_indexed_type(&self, context: &Context) -> Option<Type> {
+        match self {
+            Instruction::GetElmPtr {
+                ptr: _,
+                pointee_ty,
+                indices,
+            } => pointee_ty.get_indexed_type(context, indices),
+            _ => None,
+        }
     }
 }
 
@@ -726,12 +741,11 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn get_ptr(self, base_ptr: Pointer, ptr_ty: Type, offset: u64) -> Value {
-        let ptr = Pointer::new(self.context, ptr_ty, false, None);
         make_instruction!(
             self,
             Instruction::GetPointer {
                 base_ptr,
-                ptr_ty: ptr,
+                ptr_ty,
                 offset,
             }
         )
@@ -765,6 +779,10 @@ impl<'a> InstructionInserter<'a> {
 
     pub fn nop(self) -> Value {
         make_instruction!(self, Instruction::Nop)
+    }
+
+    pub fn ptr_to_int(self, ptr_val: Value) -> Value {
+        make_instruction!(self, Instruction::PtrToInt(ptr_val))
     }
 
     pub fn read_register(self, reg: Register) -> Value {
@@ -818,6 +836,17 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn store(self, dst_val: Value, stored_val: Value) -> Value {
+        //let dst_ty = dst_val.get_stripped_ptr_type(self.context).unwrap();
+        //let stored_ty = stored_val.get_type(self.context).unwrap();
+
+        //if !dst_ty.eq(self.context, &stored_ty) {
+        //    panic!(
+        //        "store type mismatch: dst stripped {} != stored {}",
+        //        dst_ty.as_string(self.context),
+        //        stored_ty.as_string(self.context)
+        //    );
+        //}
+
         make_instruction!(
             self,
             Instruction::Store {

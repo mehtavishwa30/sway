@@ -237,7 +237,7 @@ mod ir_builder {
             }
 
             rule op_get_element_ptr() -> IrAstOperation
-                = "get_element_ptr" _ name:id() comma() ty:ast_ty() comma() idcs:(id() ++ comma()) {
+                = "get_elem_ptr" _ name:id() comma() ty:ast_ty() comma() idcs:(id() ++ comma()) {
                     IrAstOperation::GetElementPtr(name, ty, idcs)
                 }
 
@@ -280,6 +280,11 @@ mod ir_builder {
             rule op_nop() -> IrAstOperation
                 = "nop" _ {
                     IrAstOperation::Nop
+                }
+
+            rule op_ptr_to_int() -> IrAstOperation
+                = "ptr_to_int" _ val:id() {
+                    IrAstOperation::PtrToInt(val)
                 }
 
             rule op_read_register() -> IrAstOperation
@@ -651,6 +656,7 @@ mod ir_builder {
         Log(IrAstTy, String, String),
         MemCopy(String, String, u64),
         Nop,
+        PtrToInt(String),
         ReadRegister(String),
         Ret(IrAstTy, String),
         Revert(String),
@@ -1145,6 +1151,12 @@ mod ir_builder {
                         )
                         .add_metadatum(context, opt_metadata),
                     IrAstOperation::Nop => block.ins(context).nop(),
+                    IrAstOperation::PtrToInt(val) => {
+                        block
+                            .ins(context)
+                            .ptr_to_int(*val_map.get(&val).unwrap())
+                            .add_metadatum(context, opt_metadata)
+                    }
                     IrAstOperation::ReadRegister(reg_name) => block
                         .ins(context)
                         .read_register(match reg_name.as_str() {

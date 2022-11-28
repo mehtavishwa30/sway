@@ -15,7 +15,7 @@ use super::{
 
 use sway_error::error::CompileError;
 use sway_ir::{metadata::combine as md_combine, *};
-use sway_types::{span::Span, Spanned};
+use sway_types::Spanned;
 
 use std::collections::HashMap;
 
@@ -304,12 +304,6 @@ pub(super) fn compile_function(
     if !ast_fn_decl.type_parameters.is_empty() {
         Ok(None)
     } else {
-        let args = ast_fn_decl
-            .parameters
-            .iter()
-            .map(|param| convert_fn_param(type_engine, context, param))
-            .collect::<Result<Vec<(String, Type, Span)>, CompileError>>()?;
-
         compile_fn_with_args(
             type_engine,
             context,
@@ -317,7 +311,6 @@ pub(super) fn compile_function(
             module,
             ast_fn_decl,
             is_entry,
-            args,
             None,
             logged_types_map,
             messages_types_map,
@@ -379,25 +372,6 @@ pub(super) fn compile_tests(
         .collect()
 }
 
-fn convert_fn_param(
-    type_engine: &TypeEngine,
-    context: &mut Context,
-    param: &ty::TyFunctionParameter,
-) -> Result<(String, Type, Span), CompileError> {
-    convert_resolved_typeid(type_engine, context, &param.type_id, &param.type_span).map(|ty| {
-        (
-            param.name.as_str().into(),
-            if param.is_reference && type_engine.look_up_type_id(param.type_id).is_copy_type() {
-                Type::get_pointer(context, ty)
-            } else {
-                ty
-            },
-            param.name.span(),
-        )
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
 fn compile_fn_with_args(
     type_engine: &TypeEngine,
     context: &mut Context,
@@ -405,7 +379,6 @@ fn compile_fn_with_args(
     module: Module,
     ast_fn_decl: &ty::TyFunctionDeclaration,
     is_entry: bool,
-    args: Vec<(String, Type, Span)>,
     selector: Option<[u8; 4]>,
     logged_types_map: &HashMap<TypeId, LogId>,
     messages_types_map: &HashMap<TypeId, MessageId>,
@@ -423,19 +396,37 @@ fn compile_fn_with_args(
         ..
     } = ast_fn_decl;
 
-    let mut args = args
-        .into_iter()
-        .map(|(name, ty, span)| (name, ty, md_mgr.span_to_md(context, &span)))
-        .collect::<Vec<_>>();
+    let mut args: Vec<(String, Type, Option<MetadataIndex>)> = ast_fn_decl
+        .parameters
+        .iter()
+        .map(|param| {
+            convert_resolved_typeid(type_engine, context, &param.type_id, &param.type_span).map(
+                |param_type| {
+                    let name = param.name.as_str().into();
+                    let ty = if param.is_reference || !type_engine.look_up_type_id(param.type_id).is_copy_type()
+                    {
+                        Type::get_pointer(context, param_type)
+                    } else {
+                        param_type
+                    };
+                    let span_md_idx = md_mgr.span_to_md(context, &param.name.span());
 
-    let ret_type = convert_resolved_typeid(type_engine, context, return_type, return_type_span)?;
+                    (name, ty, span_md_idx)
+                },
+            )
+        })
+        .collect::<Result<_, _>>()?;
 
-    let returns_by_ref = !is_entry && !ret_type.is_copy_type(context);
+    let mut ret_type =
+        convert_resolved_typeid(type_engine, context, &return_type, &return_type_span)?;
+
+    let returns_by_ref = !is_entry && !type_engine.look_up_type_id(*return_type).is_copy_type();
     if returns_by_ref {
         // Instead of 'returning' a by-ref value we make the last argument an 'out' parameter.
+        ret_type = Type::get_pointer(context, ret_type);
         args.push((
             "__ret_value".to_owned(),
-            Type::get_pointer(context, ret_type),
+            ret_type,
             md_mgr.span_to_md(context, return_type_span),
         ));
     }
@@ -579,15 +570,6 @@ fn compile_abi_method(
     // An ABI method is always an entry point.
     let is_entry = true;
 
-    let args = ast_fn_decl
-        .parameters
-        .iter()
-        .map(|param| {
-            convert_resolved_typeid(type_engine, context, &param.type_id, &param.type_span)
-                .map(|ty| (param.name.as_str().into(), ty, param.name.span()))
-        })
-        .collect::<Result<Vec<(String, Type, Span)>, CompileError>>()?;
-
     compile_fn_with_args(
         type_engine,
         context,
@@ -595,7 +577,6 @@ fn compile_abi_method(
         module,
         ast_fn_decl,
         is_entry,
-        args,
         Some(selector),
         logged_types_map,
         messages_types_map,

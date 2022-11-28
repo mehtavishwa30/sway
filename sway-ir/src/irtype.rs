@@ -92,12 +92,17 @@ impl Type {
     }
 
     /// Get pointer type
+    pub fn get_slice(context: &Context) -> Type {
+        Self::get_or_create_unique_type(context, TypeContent::Slice)
+    }
+
+    /// Get pointer type
     pub fn get_pointer(context: &Context, pointee_ty: Type) -> Type {
         Self::get_or_create_unique_type(context, TypeContent::Pointer(pointee_ty))
     }
 
     /// Return whether this is a 'copy' type, one whose value will always fit in a register.
-    pub fn is_copy_type(&self, context: &Context) -> bool {
+    pub fn is_copy_type_or_ptr(&self, context: &Context) -> bool {
         matches!(
             *self.get_content(context),
             TypeContent::Unit
@@ -105,6 +110,18 @@ impl Type {
                 | TypeContent::Uint(_)
                 | TypeContent::Pointer { .. }
         )
+    }
+
+    pub fn is_ptr_to_copy_type(&self, context: &Context) -> bool {
+        self.get_inner_ptr_type(context).map_or(false, |ty| {
+            matches!(
+                *ty.get_content(context),
+                TypeContent::Unit
+                    | TypeContent::Bool
+                    | TypeContent::Uint(_)
+                    | TypeContent::Pointer { .. }
+            )
+        })
     }
 
     /// Return a string representation of type, used for printing.
@@ -166,20 +183,17 @@ impl Type {
         }
     }
 
-    pub fn strip_ptr_type(&self, context: &Context) -> Type {
-        if let TypeContent::Pointer(pointee_ty) = *self.get_content(context) {
-            pointee_ty
-        } else {
-            *self
-        }
-    }
-
     /// Gets the inner pointer type if its a pointer.
     pub fn get_inner_ptr_type(&self, context: &Context) -> Option<Type> {
         match *self.get_content(context) {
             TypeContent::Pointer(pointee_typ) => Some(pointee_typ),
             _ => None,
         }
+    }
+
+    /// If this type is a pointer then return the pointed to type, else return self.
+    pub fn strip_ptr_type(&self, context: &Context) -> Type {
+        self.get_inner_ptr_type(context).unwrap_or(*self)
     }
 
     /// Is unit type
@@ -215,6 +229,11 @@ impl Type {
     /// Is array type
     pub fn is_array(&self, context: &Context) -> bool {
         matches!(*self.get_content(context), TypeContent::Array(..))
+    }
+
+    /// Is slice type
+    pub fn is_slice(&self, context: &Context) -> bool {
+        matches!(*self.get_content(context), TypeContent::Slice)
     }
 
     /// Is union type
@@ -287,6 +306,19 @@ impl Type {
             Some(n)
         } else {
             None
+        }
+    }
+
+    pub fn is_aggregate(&self, context: &Context) -> bool {
+        match *self.get_content(context) {
+            TypeContent::Union(_) | TypeContent::Struct(_) | TypeContent::Array(..) => true,
+            TypeContent::Unit
+            | TypeContent::Bool
+            | TypeContent::Uint(_)
+            | TypeContent::B256
+            | TypeContent::String(_)
+            | TypeContent::Pointer(_)
+            | TypeContent::Slice => false,
         }
     }
 }

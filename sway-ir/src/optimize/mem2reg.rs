@@ -24,10 +24,7 @@ fn get_validate_local_pointer(
             ptr_ty,
             offset,
         }) => {
-            let is_valid = ptr_ty
-                .get_type(context)
-                .eq(context, base_ptr.get_type(context))
-                && offset == 0;
+            let is_valid = ptr_ty.eq(context, &base_ptr.get_type(context)) && offset == 0;
             let name = function.lookup_local_name(context, &base_ptr);
             name.map(|name| (name.clone(), base_ptr, is_valid))
         }
@@ -39,7 +36,7 @@ fn get_validate_local_pointer(
 fn filter_usable_locals(context: &mut Context, function: &Function) -> HashSet<String> {
     let mut locals: HashSet<String> = function
         .locals_iter(context)
-        .filter(|(_, ptr)| (**ptr).get_type(context).is_copy_type(context))
+        .filter(|(_, ptr)| (**ptr).get_type(context).is_ptr_to_copy_type(context))
         .map(|(name, _)| name.clone())
         .collect();
 
@@ -160,7 +157,7 @@ pub fn promote_to_registers(context: &mut Context, function: &Function) -> Resul
         {
             match get_validate_local_pointer(context, function, &dst_val) {
                 Some((local, ptr, ..)) if safe_locals.contains(&local) => {
-                    worklist.push((local, *ptr.get_type(context), block));
+                    worklist.push((local, ptr.get_type(context), block));
                 }
                 _ => (),
             }

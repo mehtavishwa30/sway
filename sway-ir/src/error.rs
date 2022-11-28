@@ -16,21 +16,22 @@ pub enum IrError {
     ValueNotFound(String),
 
     VerifyAccessElementInconsistentTypes,
-    VerifyAccessElementOnNonArray,
     VerifyAccessElementNonIntIndex,
+    VerifyAccessElementOnNonArray,
     VerifyAccessValueInconsistentTypes,
     VerifyAccessValueInvalidIndices,
     VerifyAccessValueOnNonStruct,
-    VerifyArgumentValueIsNotArgument(String),
-    VerifyAddrOfUnknownSourceType,
     VerifyAddrOfCopyType,
-    VerifyBitcastUnknownSourceType,
+    VerifyAddrOfUnknownSourceType,
+    VerifyArgumentValueIsNotArgument(String),
+    VerifyBinaryOpIncorrectArgType,
+    VerifyBitcastBetweenInvalidTypes(String, String),
     VerifyBitcastFromNonCopyType(String),
     VerifyBitcastToNonCopyType(String),
-    VerifyBitcastBetweenInvalidTypes(String, String),
-    VerifyBinaryOpIncorrectArgType,
-    VerifyBranchToMissingBlock(String),
+    VerifyBitcastUnknownSourceType,
+    VerifyBlockArgMalformed,
     VerifyBranchParamsMismatch,
+    VerifyBranchToMissingBlock(String),
     VerifyCallArgTypeMismatch(String),
     VerifyCallToMissingFunction(String),
     VerifyCmpBadTypes(String, String),
@@ -44,26 +45,28 @@ pub enum IrError {
     VerifyIntToPtrFromNonIntegerType(String),
     VerifyIntToPtrToCopyType(String),
     VerifyIntToPtrUnknownSourceType,
-    VerifyLoadFromNonPointer,
-    VerifyMismatchedReturnTypes(String),
-    VerifyBlockArgMalformed,
-    VerifyPtrCastFromNonPointer,
-    VerifyReturnRefTypeValue(String, String),
-    VerifyStateKeyBadType,
-    VerifyStateDestBadType(String),
-    VerifyStoreMismatchedTypes,
-    VerifyStoreNonExistentPointer,
-    VerifyStoreToNonPointer,
-    VerifyUntypedValuePassedToFunction,
     VerifyInvalidGtfIndexType,
+    VerifyLoadFromNonPointer,
     VerifyLogId,
     VerifyMismatchedLoggedTypes,
+    VerifyMismatchedReturnTypes(String),
+    VerifyPtrCastFromNonPointer,
+    VerifyPtrToIntFromNonPtrType(String),
+    VerifyPtrToIntUnknownSourceType,
+    VerifyReturnRefTypeValue(String, String),
     VerifyRevertCodeBadType,
     VerifySmoRecipientBadType,
     VerifySmoBadRecipientAndMessageType,
     VerifySmoMessageSize,
     VerifySmoCoins,
     VerifySmoOutputIndex,
+    VerifyStateDestBadType(String),
+    VerifyStateKeyBadType,
+    VerifyStoreMismatchedTypes,
+    VerifyStoreNonExistentPointer,
+    VerifyStoreOfNonCopyType,
+    VerifyStoreToNonPointer,
+    VerifyUntypedValuePassedToFunction,
 }
 
 impl std::error::Error for IrError {}
@@ -171,6 +174,15 @@ impl fmt::Display for IrError {
                     "Verification failed: Incorrect argument type(s) for binary op"
                 )
             }
+            IrError::VerifyBlockArgMalformed => {
+                write!(f, "Verification failed: Block argument is malformed")
+            }
+            IrError::VerifyBranchParamsMismatch => {
+                write!(
+                    f,
+                    "Verification failed: Block parameter passed in branch is malformed"
+                )
+            }
             IrError::VerifyBranchToMissingBlock(label) => {
                 write!(
                     f,
@@ -250,27 +262,44 @@ impl fmt::Display for IrError {
                 f,
                 "Verification failed: int_to_ptr unable to determine source type."
             ),
+            IrError::VerifyInvalidGtfIndexType => write!(
+                f,
+                "Verification failed: An non-integer value has been passed to a 'gtf' instruction."
+            ),
             IrError::VerifyLoadFromNonPointer => {
                 write!(f, "Verification failed: Load must be from a pointer.")
+            }
+            IrError::VerifyLogId => {
+                write!(f, "Verification failed: log ID must be an integer.")
+            }
+            IrError::VerifyMismatchedLoggedTypes => {
+                write!(
+                    f,
+                    "Verification failed: log type must match the type of the value being logged."
+                )
             }
             IrError::VerifyMismatchedReturnTypes(fn_str) => write!(
                 f,
                 "Verification failed: Function {fn_str} return type must match its RET \
                 instructions."
             ),
-            IrError::VerifyBlockArgMalformed => {
-                write!(f, "Verification failed: Block argument is malformed")
-            }
-            IrError::VerifyBranchParamsMismatch => {
-                write!(
-                    f,
-                    "Verification failed: Block parameter passed in branch is malformed"
-                )
-            }
             IrError::VerifyPtrCastFromNonPointer => {
                 write!(
                     f,
                     "Verification failed: Pointer cast from non pointer value."
+                )
+            }
+            IrError::VerifyPtrToIntFromNonPtrType(ty_str) => {
+                write!(
+                    f,
+                    "Verification failed: Pointer to integer has type {ty_str}. \
+                    Must instead be from a pointer type."
+                )
+            }
+            IrError::VerifyPtrToIntUnknownSourceType => {
+                write!(
+                    f,
+                    "Verification failed: Pointer to integer has unknown pointer type."
                 )
             }
             IrError::VerifyReturnRefTypeValue(fn_str, ty_str) => {
@@ -278,6 +307,12 @@ impl fmt::Display for IrError {
                     f,
                     "Verification failed: Function {fn_str} must not return value with reference \
                     type of {ty_str}.",
+                )
+            }
+            IrError::VerifyRevertCodeBadType => {
+                write!(
+                    f,
+                    "Verification failed: error code for revert must be a u64."
                 )
             }
             IrError::VerifyStateKeyBadType => {
@@ -290,6 +325,12 @@ impl fmt::Display for IrError {
                 write!(
                     f,
                     "Verification failed: State access operation must be to a {ty} pointer."
+                )
+            }
+            IrError::VerifyStoreOfNonCopyType => {
+                write!(
+                    f,
+                    "Verification failed: Store must be used only for copy types."
                 )
             }
             IrError::VerifyStoreMismatchedTypes => {
@@ -307,25 +348,6 @@ impl fmt::Display for IrError {
                 f,
                 "Verification failed: An untyped/void value has been passed to a function call."
             ),
-            IrError::VerifyInvalidGtfIndexType => write!(
-                f,
-                "Verification failed: An non-integer value has been passed to a 'gtf' instruction."
-            ),
-            IrError::VerifyLogId => {
-                write!(f, "Verification failed: log ID must be an integer.")
-            }
-            IrError::VerifyMismatchedLoggedTypes => {
-                write!(
-                    f,
-                    "Verification failed: log type must match the type of the value being logged."
-                )
-            }
-            IrError::VerifyRevertCodeBadType => {
-                write!(
-                    f,
-                    "Verification failed: error code for revert must be a u64."
-                )
-            }
             IrError::VerifySmoRecipientBadType => {
                 write!(
                     f,

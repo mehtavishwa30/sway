@@ -46,28 +46,34 @@ impl Constant {
 
     pub fn new_b256(context: &Context, bytes: [u8; 32]) -> Self {
         Constant {
-            ty: Type::get_b256(context),
+            ty: Type::get_pointer(context, Type::get_b256(context)),
             value: ConstantValue::B256(bytes),
         }
     }
 
     pub fn new_string(context: &Context, string: Vec<u8>) -> Self {
         Constant {
-            ty: Type::get_string(context, string.len() as u64),
+            ty: Type::get_pointer(context, Type::get_string(context, string.len() as u64)),
             value: ConstantValue::String(string),
         }
     }
 
     pub fn new_array(context: &Context, elm_ty: Type, elems: Vec<Constant>) -> Self {
         Constant {
-            ty: Type::get_array(context, elm_ty, elems.len() as u64),
+            ty: Type::get_pointer(
+                context,
+                Type::get_array(context, elm_ty, elems.len() as u64),
+            ),
             value: ConstantValue::Array(elems),
         }
     }
 
     pub fn new_struct(context: &Context, fields: Vec<Constant>) -> Self {
         Constant {
-            ty: Type::get_struct(context, fields.iter().map(|c| c.ty).collect()),
+            ty: Type::get_pointer(
+                context,
+                Type::get_struct(context, fields.iter().map(|c| c.ty).collect()),
+            ),
             value: ConstantValue::Struct(fields),
         }
     }

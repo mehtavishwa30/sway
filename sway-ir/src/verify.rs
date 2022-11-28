@@ -185,6 +185,7 @@ impl<'a> InstructionVerifier<'a> {
                         byte_len,
                     } => self.verify_mem_copy(dst_val, src_val, byte_len)?,
                     Instruction::Nop => (),
+                    Instruction::PtrToInt(value) => self.verify_ptr_to_int(value)?,
                     Instruction::ReadRegister(_) => (),
                     Instruction::Ret(val, ty) => self.verify_ret(val, ty)?,
                     Instruction::Revert(val) => self.verify_revert(val)?,
@@ -230,7 +231,7 @@ impl<'a> InstructionVerifier<'a> {
         let val_ty = value
             .get_stripped_ptr_type(self.context)
             .ok_or(IrError::VerifyAddrOfUnknownSourceType)?;
-        if val_ty.is_copy_type(self.context) {
+        if val_ty.is_copy_type_or_ptr(self.context) {
             return Err(IrError::VerifyAddrOfCopyType);
         }
         Ok(())
@@ -241,12 +242,12 @@ impl<'a> InstructionVerifier<'a> {
         let val_ty = value
             .get_type(self.context)
             .ok_or(IrError::VerifyBitcastUnknownSourceType)?;
-        if !val_ty.is_copy_type(self.context) {
+        if val_ty.is_ptr_type(self.context) || !val_ty.is_copy_type_or_ptr(self.context) {
             return Err(IrError::VerifyBitcastFromNonCopyType(
                 val_ty.as_string(self.context),
             ));
         }
-        if !ty.is_copy_type(self.context) {
+        if ty.is_ptr_type(self.context) || !ty.is_copy_type_or_ptr(self.context) {
             return Err(IrError::VerifyBitcastToNonCopyType(
                 val_ty.as_string(self.context),
             ));
@@ -338,8 +339,10 @@ impl<'a> InstructionVerifier<'a> {
                 }
 
                 let caller_arg_type = opt_caller_arg_type.as_ref().unwrap();
-                let is_ref_call = !callee_arg_type.is_copy_type(self.context)
-                    && caller_arg_type.is_ptr_type(self.context);
+                let is_ref_call = caller_arg_type.is_ptr_type(self.context)
+                    && !callee_arg_type
+                        .strip_ptr_type(self.context)
+                        .is_copy_type_or_ptr(self.context);
                 if !caller_arg_type.eq(self.context, callee_arg_type) && !is_ref_call {
                     return Err(IrError::VerifyCallArgTypeMismatch(
                         callee_content.name.clone(),
@@ -473,7 +476,7 @@ impl<'a> InstructionVerifier<'a> {
         })
         .and_then(|_| {
             if asset_id
-                .get_type(self.context)
+                .get_stripped_ptr_type(self.context)
                 .map_or(false, |t| t.is_b256(self.context))
             {
                 Ok(())
@@ -502,10 +505,7 @@ impl<'a> InstructionVerifier<'a> {
         match ptr.get_type(self.context) {
             Some(ty)
                 if ty.is_ptr_type(self.context)
-                    && ty
-                        .get_inner_ptr_type(self.context)
-                        .unwrap()
-                        .eq(self.context, pointee_ty) =>
+                    && ty.strip_ptr_type(self.context).eq(self.context, pointee_ty) =>
             {
                 // TODO: Verify ConstantValue::Uint indices for structs.
                 Ok(())
@@ -517,7 +517,7 @@ impl<'a> InstructionVerifier<'a> {
     fn verify_get_ptr(
         &self,
         base_ptr: &Pointer,
-        _ptr_ty: &Pointer,
+        _ptr_ty: &Type,
         _offset: &u64,
     ) -> Result<(), IrError> {
         // We should perhaps verify that the offset and the casted type fit within the base type.
@@ -540,9 +540,8 @@ impl<'a> InstructionVerifier<'a> {
         }
     }
 
-    fn verify_int_to_ptr(&self, value: &Value, ty: &Type) -> Result<(), IrError> {
-        // We want the source value to be an integer and the destination type to be a reference
-        // type.
+    fn verify_int_to_ptr(&self, value: &Value, to_ptr_ty: &Type) -> Result<(), IrError> {
+        // We want the source value to be an integer.
         let val_ty = value
             .get_type(self.context)
             .ok_or(IrError::VerifyIntToPtrUnknownSourceType)?;
@@ -551,7 +550,7 @@ impl<'a> InstructionVerifier<'a> {
                 val_ty.as_string(self.context),
             ));
         }
-        if ty.is_copy_type(self.context) {
+        if to_ptr_ty.is_copy_type_or_ptr(self.context) {
             return Err(IrError::VerifyIntToPtrToCopyType(
                 val_ty.as_string(self.context),
             ));
@@ -612,6 +611,20 @@ impl<'a> InstructionVerifier<'a> {
         Ok(())
     }
 
+    fn verify_ptr_to_int(&self, ptr_val: &Value) -> Result<(), IrError> {
+        // Must be from a pointer.
+        let val_ty = ptr_val
+            .get_type(self.context)
+            .ok_or(IrError::VerifyPtrToIntUnknownSourceType)?;
+        if !val_ty.is_ptr_type(self.context) {
+            return Err(IrError::VerifyPtrToIntFromNonPtrType(
+                val_ty.as_string(self.context),
+            ));
+        }
+
+        Ok(())
+    }
+
     fn verify_ret(&self, val: &Value, ty: &Type) -> Result<(), IrError> {
         //| XXX Also waiting for better pointers in https://github.com/FuelLabs/sway/issues/2819
         //| We should disallow returning ref types, as we're using 'out' parameters for anything
@@ -657,27 +670,38 @@ impl<'a> InstructionVerifier<'a> {
     ) -> Result<(), IrError> {
         // Check that the first operand is a struct with the first field being a `b256`
         // representing the recipient address
-        if let Some(Type::Struct(agg)) = recipient_and_message.get_stripped_ptr_type(self.context) {
-            let fields = self.context.aggregates[agg.0].field_types();
-            if fields.is_empty() || !fields[0].eq(self.context, &Type::B256) {
-                return Err(IrError::VerifySmoRecipientBadType);
+        if let Some(type_ref) = recipient_and_message
+            .get_stripped_ptr_type(self.context)
+            .map(|t| t.get_content(self.context))
+        {
+            if let TypeContent::Struct(fields) = &*type_ref {
+                if fields.is_empty() || !fields[0].is_b256(self.context) {
+                    return Err(IrError::VerifySmoRecipientBadType);
+                }
+            } else {
+                return Err(IrError::VerifySmoBadRecipientAndMessageType);
             }
         } else {
             return Err(IrError::VerifySmoBadRecipientAndMessageType);
         }
 
+        let is_uint64 = |val: &Value| {
+            val.get_type(self.context)
+                .map_or(false, |t| t.is_uint_of(self.context, 64))
+        };
+
         // Check that the second operand is a `u64` representing the message size.
-        if !matches!(message_size.get_type(self.context), Some(Type::Uint(64))) {
+        if !is_uint64(message_size) {
             return Err(IrError::VerifySmoMessageSize);
         }
 
         // Check that the third operand is a `u64` representing the output index.
-        if !matches!(output_index.get_type(self.context), Some(Type::Uint(64))) {
+        if !is_uint64(output_index) {
             return Err(IrError::VerifySmoOutputIndex);
         }
 
         // Check that the fourth operand is a `u64` representing the amount of coins being sent.
-        if !matches!(coins.get_type(self.context), Some(Type::Uint(64))) {
+        if !is_uint64(coins) {
             return Err(IrError::VerifySmoCoins);
         }
 
@@ -690,12 +714,12 @@ impl<'a> InstructionVerifier<'a> {
         val_type: &Type,
         key: &Value,
     ) -> Result<(), IrError> {
-        if !matches!(self.get_pointer_type(dst_val), Some(ty) if ty.eq(self.context, val_type)) {
+        if !matches!(self.get_pointed_to_type(dst_val), Some(ty) if ty.eq(self.context, val_type)) {
             Err(IrError::VerifyStateDestBadType(
                 val_type.as_string(self.context),
             ))
         } else if !self
-            .get_pointer_type(key)
+            .get_pointed_to_type(key)
             .map_or(false, |t| t.is_b256(self.context))
         {
             Err(IrError::VerifyStateKeyBadType)
@@ -706,7 +730,7 @@ impl<'a> InstructionVerifier<'a> {
 
     fn verify_state_load_word(&self, key: &Value) -> Result<(), IrError> {
         if !self
-            .get_pointer_type(key)
+            .get_pointed_to_type(key)
             .map_or(false, |t| t.is_b256(self.context))
         {
             Err(IrError::VerifyStateKeyBadType)
@@ -717,7 +741,7 @@ impl<'a> InstructionVerifier<'a> {
 
     fn verify_state_store_word(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
         if !self
-            .get_pointer_type(key)
+            .get_pointed_to_type(key)
             .map_or(false, |t| t.is_b256(self.context))
         {
             Err(IrError::VerifyStateKeyBadType)
@@ -734,45 +758,35 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_store(&self, dst_val: &Value, stored_val: &Value) -> Result<(), IrError> {
-        let dst_ty = self.get_pointer_type(dst_val);
-        let stored_ty = stored_val.get_stripped_ptr_type(self.context);
-        if dst_ty.is_none() {
+        let dst_ty = dst_val.get_type(self.context);
+        let stored_ty = stored_val.get_type(self.context);
+        if !dst_ty.map_or(false, |ty| ty.is_ptr_type(self.context)) {
             Err(IrError::VerifyStoreToNonPointer)
-        } else if self.opt_ty_not_eq(&dst_ty, &stored_ty) {
+        } else if !stored_ty.map_or(false, |stored_ty| {
+            stored_ty.is_copy_type_or_ptr(self.context)
+        }) {
+            Err(IrError::VerifyStoreOfNonCopyType)
+        } else if self.opt_ty_not_eq(
+            &dst_ty.map(|ty| ty.strip_ptr_type(self.context)),
+            &stored_ty,
+        ) {
             Err(IrError::VerifyStoreMismatchedTypes)
         } else {
             Ok(())
         }
     }
 
-    // This is a temporary workaround due to the fact that we don't support pointer arguments yet.
-    // We do treat non-copy types as references anyways though so this is fine. Eventually, we
-    // should allow function arguments to also be Pointer.
-    //
-    // Also, because we inline everything at the moment, this doesn't really matter and is added
-    // simply to make the verifier happy.
-    //
-    fn _is_ptr_argument(&self, ptr_val: &Value) -> bool {
+    fn get_pointed_to_type(&self, ptr_val: &Value) -> Option<Type> {
         match &self.context.values[ptr_val.0].value {
-            ValueDatum::Argument(BlockArgument { ty, .. }) => !ty.is_copy_type(self.context),
-            _otherwise => false,
-        }
-    }
-
-    fn get_pointer_type(&self, ptr_val: &Value) -> Option<Type> {
-        match &self.context.values[ptr_val.0].value {
-            ValueDatum::Instruction(Instruction::GetPointer { ptr_ty, .. }) => {
-                Some(*ptr_ty.get_type(self.context))
-            }
+            ValueDatum::Instruction(Instruction::GetPointer { ptr_ty, .. }) => Some(*ptr_ty),
+            ValueDatum::Instruction(Instruction::GetElmPtr {
+                pointee_ty,
+                indices,
+                ..
+            }) => pointee_ty.get_indexed_type(self.context, indices),
             ValueDatum::Instruction(Instruction::IntToPtr(_, ty)) => Some(*ty),
             ValueDatum::Argument(BlockArgument { ty, .. }) if ty.is_ptr_type(self.context) => {
                 ty.get_inner_ptr_type(self.context)
-            }
-            ValueDatum::Argument(BlockArgument { ty: arg_ty, .. }) => {
-                match arg_ty.is_copy_type(self.context) && !arg_ty.is_ptr_type(self.context) {
-                    true => None,
-                    false => Some(*arg_ty),
-                }
             }
             _otherwise => None,
         }
@@ -787,13 +801,4 @@ impl<'a> InstructionVerifier<'a> {
     fn opt_ty_not_eq(&self, l_ty: &Option<Type>, r_ty: &Option<Type>) -> bool {
         l_ty.is_none() || r_ty.is_none() || !l_ty.unwrap().eq(self.context, r_ty.as_ref().unwrap())
     }
-
-    //| XXX Will be used by verify_ret() when we have proper pointers fixed.
-    //|fn cur_func_is_entry(&self) -> bool {
-    //|    match self.cur_module.kind {
-    //|        Kind::Script | Kind::Predicate => self.cur_function.name == "main",
-    //|        Kind::Contract => self.cur_function.selector.is_some(),
-    //|        Kind::Library => false,
-    //|    }
-    //|}
 }

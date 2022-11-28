@@ -118,7 +118,7 @@ pub fn is_small_fn(
                 .map(|max_stack_size_count| {
                     function
                         .locals_iter(context)
-                        .map(|(_name, ptr)| count_type_elements(context, ptr.get_type(context)))
+                        .map(|(_name, ptr)| count_type_elements(context, &ptr.get_type(context)))
                         .sum::<usize>()
                         <= max_stack_size_count
                 })
@@ -369,18 +369,15 @@ fn inline_instruction(
                 ptr,
                 pointee_ty,
                 indices,
-            } => new_block.ins(context).get_elm_ptr(ptr, pointee_ty, indices),
+            } => new_block.ins(context).get_elm_ptr(map_value(ptr), pointee_ty, indices),
             Instruction::GetStorageKey => new_block.ins(context).get_storage_key(),
             Instruction::GetPointer {
                 base_ptr,
                 ptr_ty,
                 offset,
-            } => {
-                let ty = *ptr_ty.get_type(context);
-                new_block
-                    .ins(context)
-                    .get_ptr(map_ptr(base_ptr), ty, offset)
-            }
+            } => new_block
+                .ins(context)
+                .get_ptr(map_ptr(base_ptr), ptr_ty, offset),
             Instruction::Gtf { index, tx_field_id } => {
                 new_block.ins(context).gtf(map_value(index), tx_field_id)
             }
@@ -403,6 +400,7 @@ fn inline_instruction(
                 .ins(context)
                 .mem_copy(map_value(dst_val), map_value(src_val), byte_len),
             Instruction::Nop => new_block.ins(context).nop(),
+            Instruction::PtrToInt(ptr) => new_block.ins(context).ptr_to_int(map_value(ptr)),
             Instruction::ReadRegister(reg) => new_block.ins(context).read_register(reg),
             // We convert `ret` to `br post_block` and add the returned value as a phi value.
             Instruction::Ret(val, _) => new_block

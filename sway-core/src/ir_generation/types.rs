@@ -28,14 +28,8 @@ pub(super) fn create_enum_aggregate(
     Ok(if field_types.iter().all(|f| f.is_unit(context)) {
         Type::get_struct(context, vec![Type::get_uint(context, 64)])
     } else {
-        let enum_aggregate = Type::get_struct(context, field_types);
-        Type::get_struct(
-            context,
-            vec![
-                Type::get_uint(context, 64),
-                Type::get_union(context, field_types),
-            ],
-        )
+        let enum_aggregate = Type::get_union(context, field_types);
+        Type::get_struct(context, vec![Type::get_uint(context, 64), enum_aggregate])
     })
 }
 
@@ -52,7 +46,7 @@ pub(super) fn create_tuple_aggregate(
     Ok(Type::get_struct(context, field_types))
 }
 
-pub(super) fn create_array_aggregate(
+pub(super) fn _create_array_aggregate(
     type_engine: &TypeEngine,
     context: &mut Context,
     element_type_id: TypeId,

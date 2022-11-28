@@ -88,6 +88,7 @@ pub fn compile_program(
             &test_fns,
         ),
     }?;
+    println!("{ctx}");
     ctx.verify()
         .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))
 }
