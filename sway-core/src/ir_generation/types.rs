@@ -43,7 +43,7 @@ pub(super) fn create_tuple_aggregate(
     Ok(Type::get_struct(context, field_types))
 }
 
-pub(super) fn create_array_aggregate(
+pub(super) fn _create_array_aggregate(
     context: &mut Context,
     element_type_id: TypeId,
     count: u64,

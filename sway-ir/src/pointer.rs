@@ -2,9 +2,7 @@
 //!
 //! NOTE: much of this was hastily put together and can be streamlined or refactored altogether.
 
-use crate::{
-    constant::Constant, context::Context, irtype::Type, pretty::DebugWithContext,
-};
+use crate::{constant::Constant, context::Context, irtype::Type, pretty::DebugWithContext};
 
 /// A wrapper around an [ECS](https://github.com/fitzgen/generational-arena) handle into the
 /// [`Context`].

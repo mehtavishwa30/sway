@@ -11,9 +11,9 @@ use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 
 use crate::{
-    asm::AsmBlockContent, block::BlockContent, function::FunctionContent,
-    metadata::Metadatum, module::ModuleContent, module::ModuleIterator, pointer::PointerContent,
-    value::ValueContent, Type, TypeContent,
+    asm::AsmBlockContent, block::BlockContent, function::FunctionContent, metadata::Metadatum,
+    module::ModuleContent, module::ModuleIterator, pointer::PointerContent, value::ValueContent,
+    Type, TypeContent,
 };
 
 /// The main IR context handle.
