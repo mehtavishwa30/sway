@@ -251,7 +251,7 @@ impl Instruction {
         };
         if let Some(ty) = ty {
             // TODO: Rewrite using if-let chain.
-            if ty.is_array(context) && ty.is_struct(context) {
+            if ty.is_array(context) || ty.is_struct(context) {
                 Some(*ty)
             } else {
                 None

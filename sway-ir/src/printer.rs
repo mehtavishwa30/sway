@@ -471,22 +471,29 @@ fn instruction_to_doc<'a>(
                 ptr,
                 pointee_ty,
                 indices,
-            } => maybe_constant_to_doc(context, md_namer, namer, ptr).append(Doc::line(
-                Doc::text(format!(
-                    "{} = get_elm_ptr {}, {}, ",
-                    namer.name(context, ins_value),
-                    namer.name(context, ptr),
-                    pointee_ty.as_string(context),
+            } => {
+                // Print consts if any first.
+                let consts = indices.iter().fold(
+                    maybe_constant_to_doc(context, md_namer, namer, ptr),
+                    |accum, idx| accum.append(maybe_constant_to_doc(context, md_namer, namer, idx)),
+                );
+                consts.append(Doc::line(
+                    Doc::text(format!(
+                        "{} = get_elm_ptr {}, {}, ",
+                        namer.name(context, ins_value),
+                        pointee_ty.as_string(context),
+                        namer.name(context, ptr),
+                    ))
+                    .append(Doc::list_sep(
+                        indices
+                            .iter()
+                            .map(|idx| Doc::text(format!("{}", namer.name(context, idx))))
+                            .collect(),
+                        Doc::Comma,
+                    ))
+                    .append(md_namer.md_idx_to_doc(context, metadata)),
                 ))
-                .append(Doc::list_sep(
-                    indices
-                        .iter()
-                        .map(|idx| Doc::text(format!("{}", namer.name(context, idx))))
-                        .collect(),
-                    Doc::Comma,
-                ))
-                .append(md_namer.md_idx_to_doc(context, metadata)),
-            )),
+            }
             Instruction::GetStorageKey => Doc::line(
                 Doc::text(format!(
                     "{} = get_storage_key",

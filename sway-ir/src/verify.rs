@@ -719,6 +719,11 @@ impl<'a> InstructionVerifier<'a> {
             ValueDatum::Instruction(Instruction::GetPointer { ptr_ty, .. }) => {
                 Some(*ptr_ty.get_type(self.context))
             }
+            ValueDatum::Instruction(Instruction::GetElmPtr {
+                pointee_ty,
+                indices,
+                ..
+            }) => pointee_ty.get_indexed_type(self.context, indices),
             ValueDatum::Instruction(Instruction::IntToPtr(_, ty)) => Some(*ty),
             ValueDatum::Argument(BlockArgument { ty, .. }) if ty.is_ptr_type(self.context) => {
                 ty.get_inner_ptr_type(self.context)
