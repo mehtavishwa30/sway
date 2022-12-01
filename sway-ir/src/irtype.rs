@@ -286,4 +286,16 @@ impl Type {
             None
         }
     }
+
+    pub fn is_aggregate(&self, context: &Context) -> bool {
+        match *self.get_content(context) {
+            TypeContent::Union(_) | TypeContent::Struct(_) | TypeContent::Array(..) => true,
+            TypeContent::Unit
+            | TypeContent::Bool
+            | TypeContent::Uint(_)
+            | TypeContent::B256
+            | TypeContent::String(_)
+            | TypeContent::Pointer(_) => false,
+        }
+    }
 }

@@ -1453,10 +1453,18 @@ impl FnCompiler {
                 .ins(context)
                 .get_ptr(ptr, ptr_ty, 0)
                 .add_metadatum(context, span_md_idx);
-            self.current_block
-                .ins(context)
-                .store(ptr_val, init_val)
-                .add_metadatum(context, span_md_idx);
+            if ptr_ty.strip_ptr_type(context).is_aggregate(context) {
+                let size = ir_type_size_in_bytes(context, &ptr_ty.strip_ptr_type(context));
+                self.current_block
+                    .ins(context)
+                    .mem_copy(ptr_val, init_val, size)
+                    .add_metadatum(context, span_md_idx);
+            } else {
+                self.current_block
+                    .ins(context)
+                    .store(ptr_val, init_val)
+                    .add_metadatum(context, span_md_idx);
+            }
         }
         Ok(None)
     }
