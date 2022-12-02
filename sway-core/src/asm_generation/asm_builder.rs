@@ -181,7 +181,7 @@ impl<'ir> AsmBuilder<'ir> {
                     base_ptr,
                     ptr_ty,
                     offset,
-                } => self.compile_get_pointer(instr_val, base_ptr, ptr_ty, *offset),
+                } => self.compile_get_local(instr_val, base_ptr, ptr_ty, *offset),
                 Instruction::Gtf { index, tx_field_id } => {
                     self.compile_gtf(instr_val, index, *tx_field_id)
                 }
@@ -783,56 +783,55 @@ impl<'ir> AsmBuilder<'ir> {
         ok((), warnings, errors)
     }
 
-    fn compile_get_pointer(
+    fn compile_get_local(
         &mut self,
         instr_val: &Value,
         base_ptr: &Pointer,
         ptr_ty: &Pointer,
         offset: u64,
     ) {
-        // `get_ptr` is like a `load` except the value isn't dereferenced.
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        match self.ptr_map.get(base_ptr) {
-            None => unimplemented!("BUG? Uninitialised pointer."),
-            Some(storage) => match storage.clone() {
-                Storage::Data(_data_id) => {
-                    // Not sure if we'll ever need this.
-                    unimplemented!("TODO get_ptr() into the data section.");
+        let word_offs = self
+            .ptr_map
+            .get(base_ptr)
+            .and_then(|stor| {
+                if let Storage::Stack(offs) = stor {
+                    Some(offs)
+                } else {
+                    None
                 }
-                Storage::Stack(word_offs) => {
-                    let ptr_ty_size_in_bytes =
-                        ir_type_size_in_bytes(self.context, ptr_ty.get_type(self.context));
+            })
+            .expect("BUG? Uninitialised pointer.");
+        let ptr_ty_size_in_bytes =
+            ir_type_size_in_bytes(self.context, ptr_ty.get_type(self.context));
 
-                    let offset_in_bytes = word_offs * 8 + ptr_ty_size_in_bytes * offset;
-                    let instr_reg = self.reg_seqr.next();
-                    if offset_in_bytes > compiler_constants::TWELVE_BITS {
-                        self.number_to_reg(offset_in_bytes, &instr_reg, owning_span.clone());
-                        self.cur_bytecode.push(Op {
-                            opcode: either::Either::Left(VirtualOp::ADD(
-                                instr_reg.clone(),
-                                self.locals_base_reg().clone(),
-                                instr_reg.clone(),
-                            )),
-                            comment: "get offset reg for get_ptr".into(),
-                            owning_span,
-                        });
-                    } else {
-                        self.cur_bytecode.push(Op {
-                            opcode: either::Either::Left(VirtualOp::ADDI(
-                                instr_reg.clone(),
-                                self.locals_base_reg().clone(),
-                                VirtualImmediate12 {
-                                    value: (offset_in_bytes) as u16,
-                                },
-                            )),
-                            comment: "get offset reg for get_ptr".into(),
-                            owning_span,
-                        });
-                    }
-                    self.reg_map.insert(*instr_val, instr_reg);
-                }
-            },
+        let offset_in_bytes = word_offs * 8 + ptr_ty_size_in_bytes * offset;
+        let instr_reg = self.reg_seqr.next();
+        if offset_in_bytes > compiler_constants::TWELVE_BITS {
+            self.number_to_reg(offset_in_bytes, &instr_reg, owning_span.clone());
+            self.cur_bytecode.push(Op {
+                opcode: either::Either::Left(VirtualOp::ADD(
+                    instr_reg.clone(),
+                    self.locals_base_reg().clone(),
+                    instr_reg.clone(),
+                )),
+                comment: "get offset reg for get_ptr".into(),
+                owning_span,
+            });
+        } else {
+            self.cur_bytecode.push(Op {
+                opcode: either::Either::Left(VirtualOp::ADDI(
+                    instr_reg.clone(),
+                    self.locals_base_reg().clone(),
+                    VirtualImmediate12 {
+                        value: (offset_in_bytes) as u16,
+                    },
+                )),
+                comment: "get offset reg for get_ptr".into(),
+                owning_span,
+            });
         }
+        self.reg_map.insert(*instr_val, instr_reg);
     }
 
     fn compile_gtf(&mut self, instr_val: &Value, index: &Value, tx_field_id: u64) {
@@ -858,99 +857,32 @@ impl<'ir> AsmBuilder<'ir> {
     }
 
     fn compile_load(&mut self, instr_val: &Value, src_val: &Value) -> CompileResult<()> {
-        let ptr = self.resolve_ptr(src_val);
-        if ptr.value.is_none() {
-            return ptr.map(|_| ());
-        }
-        let (ptr, _ptr_ty, _offset) = ptr.value.unwrap();
-        let instr_reg = self.reg_seqr.next();
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        match self.ptr_map.get(&ptr) {
-            None => unimplemented!("BUG? Uninitialised pointer."),
-            Some(storage) => match storage.clone() {
-                Storage::Data(data_id) => {
-                    self.cur_bytecode.push(Op {
-                        opcode: Either::Left(VirtualOp::LWDataId(instr_reg.clone(), data_id)),
-                        comment: "load constant".into(),
-                        owning_span,
-                    });
-                }
-                Storage::Stack(word_offs) => {
-                    let base_reg = self.locals_base_reg().clone();
-                    if ptr.get_type(self.context).is_copy_type(self.context) {
-                        // Value can fit in a register, so we load the value.
-                        if word_offs > compiler_constants::TWELVE_BITS {
-                            let offs_reg = self.reg_seqr.next();
-                            self.number_to_reg(
-                                word_offs * 8, // Base reg for LW is in bytes
-                                &offs_reg,
-                                owning_span.clone(),
-                            );
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::ADD(
-                                    offs_reg.clone(),
-                                    base_reg,
-                                    offs_reg.clone(),
-                                )),
-                                comment: "absolute offset for load".into(),
-                                owning_span: owning_span.clone(),
-                            });
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::LW(
-                                    instr_reg.clone(),
-                                    offs_reg.clone(),
-                                    VirtualImmediate12 { value: 0 },
-                                )),
-                                comment: "load value".into(),
-                                owning_span,
-                            });
-                        } else {
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::LW(
-                                    instr_reg.clone(),
-                                    base_reg,
-                                    VirtualImmediate12 {
-                                        value: word_offs as u16,
-                                    },
-                                )),
-                                comment: "load value".into(),
-                                owning_span,
-                            });
-                        }
-                    } else {
-                        // Value too big for a register, so we return the memory offset.  This is
-                        // what LW to the data section does, via LWDataId.
-                        let word_offs = word_offs * 8;
-                        if word_offs > compiler_constants::TWELVE_BITS {
-                            let offs_reg = self.reg_seqr.next();
-                            self.number_to_reg(word_offs, &offs_reg, owning_span.clone());
-                            self.cur_bytecode.push(Op {
-                                opcode: either::Either::Left(VirtualOp::ADD(
-                                    instr_reg.clone(),
-                                    base_reg,
-                                    offs_reg,
-                                )),
-                                comment: "load address".into(),
-                                owning_span,
-                            });
-                        } else {
-                            self.cur_bytecode.push(Op {
-                                opcode: either::Either::Left(VirtualOp::ADDI(
-                                    instr_reg.clone(),
-                                    base_reg,
-                                    VirtualImmediate12 {
-                                        value: word_offs as u16,
-                                    },
-                                )),
-                                comment: "load address".into(),
-                                owning_span,
-                            });
-                        }
-                    }
-                }
-            },
+
+        let src_reg = self.opt_value_to_register(src_val);
+        if src_reg.is_none() {
+            return err(
+                Vec::new(),
+                vec![CompileError::Internal(
+                    "Missing `load` source.",
+                    owning_span.unwrap_or_else(|| Span::dummy()),
+                )],
+            );
         }
+
+        let instr_reg = self.reg_seqr.next();
+        self.cur_bytecode.push(Op {
+            opcode: Either::Left(VirtualOp::LW(
+                instr_reg.clone(),
+                src_reg.unwrap(),
+                VirtualImmediate12 { value: 0 },
+            )),
+            comment: "load value".into(),
+            owning_span,
+        });
+
         self.reg_map.insert(*instr_val, instr_reg);
+
         ok((), Vec::new(), Vec::new())
     }
 
@@ -1153,169 +1085,172 @@ impl<'ir> AsmBuilder<'ir> {
 
     fn compile_state_access_quad_word(
         &mut self,
-        instr_val: &Value,
-        val: &Value,
-        key: &Value,
-        access_type: StateAccessType,
+        _instr_val: &Value,
+        _val: &Value,
+        _key: &Value,
+        _access_type: StateAccessType,
     ) -> CompileResult<()> {
-        // Make sure that both val and key are pointers to B256.
-        assert!(val
-            .get_stripped_ptr_type(self.context)
-            .map_or_else(|| false, |t| t.is_b256(self.context)));
-        assert!(key
-            .get_stripped_ptr_type(self.context)
-            .map_or_else(|| false, |t| t.is_b256(self.context)));
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
+        todo!()
+        //|// Make sure that both val and key are pointers to B256.
+        //|assert!(val
+        //|    .get_stripped_ptr_type(self.context)
+        //|    .map_or_else(|| false, |t| t.is_b256(self.context)));
+        //|assert!(key
+        //|    .get_stripped_ptr_type(self.context)
+        //|    .map_or_else(|| false, |t| t.is_b256(self.context)));
+        //|let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
 
-        let key_ptr = self.resolve_ptr(key);
-        if key_ptr.value.is_none() {
-            return key_ptr.map(|_| ());
-        }
-        let (key_ptr, ptr_ty, offset) = key_ptr.value.unwrap();
+        //|let key_ptr = self.resolve_ptr(key);
+        //|if key_ptr.value.is_none() {
+        //|    return key_ptr.map(|_| ());
+        //|}
+        //|let (key_ptr, ptr_ty, offset) = key_ptr.value.unwrap();
 
-        // Not expecting an offset here nor a pointer cast
-        assert!(offset == 0);
-        assert!(ptr_ty
-            .get_type(self.context)
-            .eq(self.context, &Type::get_b256(self.context)));
+        //|// Not expecting an offset here nor a pointer cast
+        //|assert!(offset == 0);
+        //|assert!(ptr_ty
+        //|    .get_type(self.context)
+        //|    .eq(self.context, &Type::get_b256(self.context)));
 
-        let val_reg = if matches!(
-            val.get_instruction(self.context),
-            Some(Instruction::IntToPtr(..))
-        ) {
-            match self.reg_map.get(val) {
-                Some(vreg) => vreg.clone(),
-                None => unreachable!("int_to_ptr instruction doesn't have vreg mapped"),
-            }
-        } else {
-            // Expect ptr_ty here to also be b256 and offset to be whatever...
-            let val_ptr = self.resolve_ptr(val);
-            if val_ptr.value.is_none() {
-                return val_ptr.map(|_| ());
-            }
-            let (val_ptr, ptr_ty, offset) = val_ptr.value.unwrap();
-            // Expect the ptr_ty for val to also be B256
-            assert!(ptr_ty
-                .get_type(self.context)
-                .eq(self.context, &Type::get_b256(self.context)));
-            match self.ptr_map.get(&val_ptr) {
-                Some(Storage::Stack(val_offset)) => {
-                    let base_reg = self.locals_base_reg().clone();
-                    let val_offset_in_bytes = val_offset * 8 + offset * 32;
-                    self.offset_reg(&base_reg, val_offset_in_bytes, owning_span.clone())
-                }
-                _ => unreachable!("Unexpected storage locations for key and val"),
-            }
-        };
+        //|let val_reg = if matches!(
+        //|    val.get_instruction(self.context),
+        //|    Some(Instruction::IntToPtr(..))
+        //|) {
+        //|    match self.reg_map.get(val) {
+        //|        Some(vreg) => vreg.clone(),
+        //|        None => unreachable!("int_to_ptr instruction doesn't have vreg mapped"),
+        //|    }
+        //|} else {
+        //|    // Expect ptr_ty here to also be b256 and offset to be whatever...
+        //|    let val_ptr = self.resolve_ptr(val);
+        //|    if val_ptr.value.is_none() {
+        //|        return val_ptr.map(|_| ());
+        //|    }
+        //|    let (val_ptr, ptr_ty, offset) = val_ptr.value.unwrap();
+        //|    // Expect the ptr_ty for val to also be B256
+        //|    assert!(ptr_ty
+        //|        .get_type(self.context)
+        //|        .eq(self.context, &Type::get_b256(self.context)));
+        //|    match self.ptr_map.get(&val_ptr) {
+        //|        Some(Storage::Stack(val_offset)) => {
+        //|            let base_reg = self.locals_base_reg().clone();
+        //|            let val_offset_in_bytes = val_offset * 8 + offset * 32;
+        //|            self.offset_reg(&base_reg, val_offset_in_bytes, owning_span.clone())
+        //|        }
+        //|        _ => unreachable!("Unexpected storage locations for key and val"),
+        //|    }
+        //|};
 
-        let key_reg = match self.ptr_map.get(&key_ptr) {
-            Some(Storage::Stack(key_offset)) => {
-                let base_reg = self.locals_base_reg().clone();
-                let key_offset_in_bytes = key_offset * 8;
-                self.offset_reg(&base_reg, key_offset_in_bytes, owning_span.clone())
-            }
-            _ => unreachable!("Unexpected storage locations for key and val"),
-        };
+        //|let key_reg = match self.ptr_map.get(&key_ptr) {
+        //|    Some(Storage::Stack(key_offset)) => {
+        //|        let base_reg = self.locals_base_reg().clone();
+        //|        let key_offset_in_bytes = key_offset * 8;
+        //|        self.offset_reg(&base_reg, key_offset_in_bytes, owning_span.clone())
+        //|    }
+        //|    _ => unreachable!("Unexpected storage locations for key and val"),
+        //|};
 
-        self.cur_bytecode.push(Op {
-            opcode: Either::Left(match access_type {
-                StateAccessType::Read => VirtualOp::SRWQ(val_reg, key_reg),
-                StateAccessType::Write => VirtualOp::SWWQ(key_reg, val_reg),
-            }),
-            comment: "quad word state access".into(),
-            owning_span,
-        });
-        ok((), Vec::new(), Vec::new())
+        //|self.cur_bytecode.push(Op {
+        //|    opcode: Either::Left(match access_type {
+        //|        StateAccessType::Read => VirtualOp::SRWQ(val_reg, key_reg),
+        //|        StateAccessType::Write => VirtualOp::SWWQ(key_reg, val_reg),
+        //|    }),
+        //|    comment: "quad word state access".into(),
+        //|    owning_span,
+        //|});
+        //|ok((), Vec::new(), Vec::new())
     }
 
-    fn compile_state_load_word(&mut self, instr_val: &Value, key: &Value) -> CompileResult<()> {
-        // Make sure that the key is a pointers to B256.
-        assert!(key
-            .get_stripped_ptr_type(self.context)
-            .map_or_else(|| false, |t| t.is_b256(self.context)));
+    fn compile_state_load_word(&mut self, _instr_val: &Value, _key: &Value) -> CompileResult<()> {
+        todo!()
+        //|// Make sure that the key is a pointers to B256.
+        //|assert!(key
+        //|    .get_stripped_ptr_type(self.context)
+        //|    .map_or_else(|| false, |t| t.is_b256(self.context)));
 
-        let key_ptr = self.resolve_ptr(key);
-        if key_ptr.value.is_none() {
-            return key_ptr.map(|_| ());
-        }
-        let (key_ptr, ptr_ty, offset) = key_ptr.value.unwrap();
+        //|let key_ptr = self.resolve_ptr(key);
+        //|if key_ptr.value.is_none() {
+        //|    return key_ptr.map(|_| ());
+        //|}
+        //|let (key_ptr, ptr_ty, offset) = key_ptr.value.unwrap();
 
-        // Not expecting an offset here nor a pointer cast
-        assert!(offset == 0);
-        assert!(ptr_ty
-            .get_type(self.context)
-            .eq(self.context, &Type::get_b256(self.context)));
+        //|// Not expecting an offset here nor a pointer cast
+        //|assert!(offset == 0);
+        //|assert!(ptr_ty
+        //|    .get_type(self.context)
+        //|    .eq(self.context, &Type::get_b256(self.context)));
 
-        let load_reg = self.reg_seqr.next();
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        match self.ptr_map.get(&key_ptr) {
-            Some(Storage::Stack(key_offset)) => {
-                let base_reg = self.locals_base_reg().clone();
-                let key_offset_in_bytes = key_offset * 8;
+        //|let load_reg = self.reg_seqr.next();
+        //|let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
+        //|match self.ptr_map.get(&key_ptr) {
+        //|    Some(Storage::Stack(key_offset)) => {
+        //|        let base_reg = self.locals_base_reg().clone();
+        //|        let key_offset_in_bytes = key_offset * 8;
 
-                let key_reg = self.offset_reg(&base_reg, key_offset_in_bytes, owning_span.clone());
+        //|        let key_reg = self.offset_reg(&base_reg, key_offset_in_bytes, owning_span.clone());
 
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::SRW(load_reg.clone(), key_reg)),
-                    comment: "single word state access".into(),
-                    owning_span,
-                });
-            }
-            _ => unreachable!("Unexpected storage location for key"),
-        }
+        //|        self.cur_bytecode.push(Op {
+        //|            opcode: Either::Left(VirtualOp::SRW(load_reg.clone(), key_reg)),
+        //|            comment: "single word state access".into(),
+        //|            owning_span,
+        //|        });
+        //|    }
+        //|    _ => unreachable!("Unexpected storage location for key"),
+        //|}
 
-        self.reg_map.insert(*instr_val, load_reg);
-        ok((), Vec::new(), Vec::new())
+        //|self.reg_map.insert(*instr_val, load_reg);
+        //|ok((), Vec::new(), Vec::new())
     }
 
     fn compile_state_store_word(
         &mut self,
-        instr_val: &Value,
-        store_val: &Value,
-        key: &Value,
+        _instr_val: &Value,
+        _store_val: &Value,
+        _key: &Value,
     ) -> CompileResult<()> {
-        // Make sure that key is a pointer to B256.
-        assert!(key
-            .get_stripped_ptr_type(self.context)
-            .map_or_else(|| false, |t| t.is_b256(self.context)));
+        todo!()
+        //|// Make sure that key is a pointer to B256.
+        //|assert!(key
+        //|    .get_stripped_ptr_type(self.context)
+        //|    .map_or_else(|| false, |t| t.is_b256(self.context)));
 
-        // Make sure that store_val is a U64 value.
-        assert!(store_val
-            .get_stripped_ptr_type(self.context)
-            .map_or_else(|| false, |t| t.is_b256(self.context)));
-        let store_reg = self.value_to_register(store_val);
+        //|// Make sure that store_val is a U64 value.
+        //|assert!(store_val
+        //|    .get_stripped_ptr_type(self.context)
+        //|    .map_or_else(|| false, |t| t.is_b256(self.context)));
+        //|let store_reg = self.value_to_register(store_val);
 
-        // Expect the get_ptr here to have type b256 and offset = 0???
-        let key_ptr = self.resolve_ptr(key);
-        if key_ptr.value.is_none() {
-            return key_ptr.map(|_| ());
-        }
-        let (key_ptr, ptr_ty, offset) = key_ptr.value.unwrap();
+        //|// Expect the get_ptr here to have type b256 and offset = 0???
+        //|let key_ptr = self.resolve_ptr(key);
+        //|if key_ptr.value.is_none() {
+        //|    return key_ptr.map(|_| ());
+        //|}
+        //|let (key_ptr, ptr_ty, offset) = key_ptr.value.unwrap();
 
-        // Not expecting an offset here nor a pointer cast
-        assert!(offset == 0);
-        assert!(ptr_ty
-            .get_type(self.context)
-            .eq(self.context, &Type::get_b256(self.context)));
+        //|// Not expecting an offset here nor a pointer cast
+        //|assert!(offset == 0);
+        //|assert!(ptr_ty
+        //|    .get_type(self.context)
+        //|    .eq(self.context, &Type::get_b256(self.context)));
 
-        let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        match self.ptr_map.get(&key_ptr) {
-            Some(Storage::Stack(key_offset)) => {
-                let base_reg = self.locals_base_reg().clone();
-                let key_offset_in_bytes = key_offset * 8;
+        //|let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
+        //|match self.ptr_map.get(&key_ptr) {
+        //|    Some(Storage::Stack(key_offset)) => {
+        //|        let base_reg = self.locals_base_reg().clone();
+        //|        let key_offset_in_bytes = key_offset * 8;
 
-                let key_reg = self.offset_reg(&base_reg, key_offset_in_bytes, owning_span.clone());
+        //|        let key_reg = self.offset_reg(&base_reg, key_offset_in_bytes, owning_span.clone());
 
-                self.cur_bytecode.push(Op {
-                    opcode: Either::Left(VirtualOp::SWW(key_reg, store_reg)),
-                    comment: "single word state access".into(),
-                    owning_span,
-                });
-            }
-            _ => unreachable!("Unexpected storage locations for key and store_val"),
-        }
+        //|        self.cur_bytecode.push(Op {
+        //|            opcode: Either::Left(VirtualOp::SWW(key_reg, store_reg)),
+        //|            comment: "single word state access".into(),
+        //|            owning_span,
+        //|        });
+        //|    }
+        //|    _ => unreachable!("Unexpected storage locations for key and store_val"),
+        //|}
 
-        ok((), Vec::new(), Vec::new())
+        //|ok((), Vec::new(), Vec::new())
     }
 
     fn compile_store(
@@ -1324,145 +1259,31 @@ impl<'ir> AsmBuilder<'ir> {
         dst_val: &Value,
         stored_val: &Value,
     ) -> CompileResult<()> {
-        let ptr = self.resolve_ptr(dst_val);
-        if ptr.value.is_none() {
-            return ptr.map(|_| ());
-        }
-        let (ptr, _ptr_ty, _offset) = ptr.value.unwrap();
-        let stored_reg = self.value_to_register(stored_val);
-        let is_aggregate_ptr = ptr.is_aggregate_ptr(self.context);
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
-        match self.ptr_map.get(&ptr) {
-            None => unreachable!("Bug! Trying to store to an unknown pointer."),
-            Some(storage) => match storage {
-                Storage::Data(_) => unreachable!("BUG! Trying to store to the data section."),
-                Storage::Stack(word_offs) => {
-                    let word_offs = *word_offs;
-                    let store_type = ptr.get_type(self.context);
-                    let store_size_in_words =
-                        size_bytes_in_words!(ir_type_size_in_bytes(self.context, store_type));
-                    if store_type.is_copy_type(self.context) {
-                        let base_reg = self.locals_base_reg().clone();
 
-                        // A single word can be stored with SW.
-                        let stored_reg = if !is_aggregate_ptr {
-                            // stored_reg is a value.
-                            stored_reg
-                        } else {
-                            // stored_reg is a pointer, even though size is 1.  We need to load it.
-                            let tmp_reg = self.reg_seqr.next();
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::LW(
-                                    tmp_reg.clone(),
-                                    stored_reg,
-                                    VirtualImmediate12 { value: 0 },
-                                )),
-                                comment: "load for store".into(),
-                                owning_span: owning_span.clone(),
-                            });
-                            tmp_reg
-                        };
-                        if word_offs > compiler_constants::TWELVE_BITS {
-                            let offs_reg = self.reg_seqr.next();
-                            self.number_to_reg(
-                                word_offs * 8, // Base reg for SW is in bytes
-                                &offs_reg,
-                                owning_span.clone(),
-                            );
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::ADD(
-                                    offs_reg.clone(),
-                                    base_reg,
-                                    offs_reg.clone(),
-                                )),
-                                comment: "store absolute offset".into(),
-                                owning_span: owning_span.clone(),
-                            });
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::SW(
-                                    offs_reg,
-                                    stored_reg,
-                                    VirtualImmediate12 { value: 0 },
-                                )),
-                                comment: "store value".into(),
-                                owning_span,
-                            });
-                        } else {
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::SW(
-                                    base_reg,
-                                    stored_reg,
-                                    VirtualImmediate12 {
-                                        value: word_offs as u16,
-                                    },
-                                )),
-                                comment: "store value".into(),
-                                owning_span,
-                            });
-                        }
-                    } else {
-                        let base_reg = self.locals_base_reg().clone();
+        let dst_reg = self.opt_value_to_register(dst_val);
+        if dst_reg.is_none() {
+            return err(
+                Vec::new(),
+                vec![CompileError::Internal(
+                    "Missing `store` destination.",
+                    owning_span.unwrap_or_else(|| Span::dummy()),
+                )],
+            );
+        }
 
-                        // Bigger than 1 word needs a MCPI.  XXX Or MCP if it's huge.
-                        let dest_offs_reg = self.reg_seqr.next();
-                        if word_offs * 8 > compiler_constants::TWELVE_BITS {
-                            self.number_to_reg(word_offs * 8, &dest_offs_reg, owning_span.clone());
-                            self.cur_bytecode.push(Op {
-                                opcode: either::Either::Left(VirtualOp::ADD(
-                                    dest_offs_reg.clone(),
-                                    base_reg,
-                                    dest_offs_reg.clone(),
-                                )),
-                                comment: "get store offset".into(),
-                                owning_span: owning_span.clone(),
-                            });
-                        } else {
-                            self.cur_bytecode.push(Op {
-                                opcode: either::Either::Left(VirtualOp::ADDI(
-                                    dest_offs_reg.clone(),
-                                    base_reg,
-                                    VirtualImmediate12 {
-                                        value: (word_offs * 8) as u16,
-                                    },
-                                )),
-                                comment: "get store offset".into(),
-                                owning_span: owning_span.clone(),
-                            });
-                        }
+        let stored_reg = self.value_to_register(stored_val);
 
-                        if store_size_in_words * 8 > compiler_constants::TWELVE_BITS {
-                            let size_reg = self.reg_seqr.next();
-                            self.number_to_reg(
-                                store_size_in_words * 8,
-                                &size_reg,
-                                owning_span.clone(),
-                            );
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::MCP(
-                                    dest_offs_reg,
-                                    stored_reg,
-                                    size_reg,
-                                )),
-                                comment: "store value".into(),
-                                owning_span,
-                            });
-                        } else {
-                            self.cur_bytecode.push(Op {
-                                opcode: Either::Left(VirtualOp::MCPI(
-                                    dest_offs_reg,
-                                    stored_reg,
-                                    VirtualImmediate12 {
-                                        value: (store_size_in_words * 8) as u16,
-                                    },
-                                )),
-                                comment: "store value".into(),
-                                owning_span,
-                            });
-                        }
-                    }
-                }
-            },
-        };
+        self.cur_bytecode.push(Op {
+            opcode: Either::Left(VirtualOp::SW(
+                dst_reg.unwrap(),
+                stored_reg,
+                VirtualImmediate12 { value: 0 },
+            )),
+            comment: "store value".into(),
+            owning_span,
+        });
+
         ok((), Vec::new(), Vec::new())
     }
 

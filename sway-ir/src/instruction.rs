@@ -210,6 +210,16 @@ impl Instruction {
             Instruction::GetPointer { ptr_ty, .. } => {
                 Some(Type::get_pointer(context, *ptr_ty.get_type(context)))
             }
+            Instruction::GetElmPtr {
+                ptr: _,
+                pointee_ty,
+                indices,
+            } => {
+                let ty = pointee_ty
+                    .get_indexed_type(context, indices)
+                    .expect("GetElmPtr indexing error");
+                Some(Type::get_pointer(context, Type::get_pointer(context, ty)))
+            }
 
             // Used to re-interpret an integer as a pointer to some type so return the pointer type.
             Instruction::IntToPtr(_, ty) => Some(*ty),
@@ -228,16 +238,6 @@ impl Instruction {
 
             // No-op is also no-type.
             Instruction::Nop => None,
-            Instruction::GetElmPtr {
-                ptr: _,
-                pointee_ty,
-                indices,
-            } => {
-                let ty = pointee_ty
-                    .get_indexed_type(context, indices)
-                    .expect("GetElmPtr indexing error");
-                Some(Type::get_pointer(context, Type::get_pointer(context, ty)))
-            }
         }
     }
 

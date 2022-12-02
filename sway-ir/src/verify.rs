@@ -693,6 +693,8 @@ impl<'a> InstructionVerifier<'a> {
         let stored_ty = stored_val.get_stripped_ptr_type(self.context);
         if dst_ty.is_none() {
             Err(IrError::VerifyStoreToNonPointer)
+        } else if !dst_ty.unwrap().is_copy_type(self.context) {
+            Err(IrError::VerifyStoreOfNonCopyType)
         } else if self.opt_ty_not_eq(&dst_ty, &stored_ty) {
             Err(IrError::VerifyStoreMismatchedTypes)
         } else {

@@ -479,7 +479,7 @@ fn instruction_to_doc<'a>(
                 );
                 consts.append(Doc::line(
                     Doc::text(format!(
-                        "{} = get_elm_ptr {}, {}, ",
+                        "{} = get_elem_ptr {}, {}, ",
                         namer.name(context, ins_value),
                         pointee_ty.as_string(context),
                         namer.name(context, ptr),

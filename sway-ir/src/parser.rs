@@ -243,7 +243,7 @@ mod ir_builder {
             }
 
             rule op_get_element_ptr() -> IrAstOperation
-                = "get_element_ptr" _ name:id() comma() ty:ast_ty() comma() idcs:(id() ++ comma()) {
+                = "get_elem_ptr" _ name:id() comma() ty:ast_ty() comma() idcs:(id() ++ comma()) {
                     IrAstOperation::GetElementPtr(name, ty, idcs)
                 }
 

@@ -51,6 +51,7 @@ pub enum IrError {
     VerifyReturnRefTypeValue(String, String),
     VerifyStateKeyBadType,
     VerifyStateDestBadType(String),
+    VerifyStoreOfNonCopyType,
     VerifyStoreMismatchedTypes,
     VerifyStoreNonExistentPointer,
     VerifyStoreToNonPointer,
@@ -286,6 +287,9 @@ impl fmt::Display for IrError {
                     f,
                     "Verification failed: State access operation must be to a {ty} pointer."
                 )
+            }
+            IrError::VerifyStoreOfNonCopyType => {
+                write!(f, "Store must be used only for copy types.")
             }
             IrError::VerifyStoreMismatchedTypes => {
                 write!(
