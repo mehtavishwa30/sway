@@ -208,7 +208,7 @@ impl Instruction {
 
             // These can be recursed to via Load, so we return the pointer type.
             Instruction::GetPointer { ptr_ty, .. } => {
-                Some(Type::get_pointer(context, *ptr_ty.get_type(context)))
+                Some(Type::get_pointer(context, ptr_ty.get_type(context)))
             }
             Instruction::GetElmPtr {
                 ptr: _,
@@ -244,15 +244,16 @@ impl Instruction {
     /// Some [`Instruction`]s may have struct arguments.  Return it if so for this instruction.
     pub fn get_aggregate(&self, context: &Context) -> Option<Type> {
         let ty = match self {
-            Instruction::Call(func, _args) => Some(&context.functions[func.0].return_type),
+            Instruction::Call(func, _args) => Some(context.functions[func.0].return_type),
             Instruction::GetPointer { ptr_ty, .. } => Some(ptr_ty.get_type(context)),
+            Instruction::GetElmPtr { .. } => self.gep_indexed_type(context),
             // Unknown aggregate instruction.  Adding these as we come across them...
             _otherwise => None,
         };
         if let Some(ty) = ty {
             // TODO: Rewrite using if-let chain.
             if ty.is_array(context) || ty.is_struct(context) {
-                Some(*ty)
+                Some(ty)
             } else {
                 None
             }
@@ -473,6 +474,15 @@ impl Instruction {
                 | Instruction::Ret(..)
                 | Instruction::Revert(..)
         )
+    }
+
+    pub fn gep_indexed_type(&self, context: &Context) -> Option<Type> {
+        match self {
+            Instruction::GetElmPtr { ptr: _, pointee_ty, indices } => {
+                pointee_ty.get_indexed_type(context, indices)
+            }
+            _ => None
+        }
     }
 }
 

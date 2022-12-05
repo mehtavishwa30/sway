@@ -117,7 +117,7 @@ pub fn is_small_fn(
                 .map(|max_stack_size_count| {
                     function
                         .locals_iter(context)
-                        .map(|(_name, ptr)| count_type_elements(context, ptr.get_type(context)))
+                        .map(|(_name, ptr)| count_type_elements(context, &ptr.get_type(context)))
                         .sum::<usize>()
                         <= max_stack_size_count
                 })
@@ -375,7 +375,7 @@ fn inline_instruction(
                 ptr_ty,
                 offset,
             } => {
-                let ty = *ptr_ty.get_type(context);
+                let ty = ptr_ty.get_type(context);
                 new_block
                     .ins(context)
                     .get_ptr(map_ptr(base_ptr), ty, offset)

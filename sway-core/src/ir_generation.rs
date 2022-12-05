@@ -57,6 +57,7 @@ pub fn compile_program(program: ty::TyProgram) -> Result<Context, CompileError> 
         ),
         ty::TyProgramKind::Library { .. } => unimplemented!("compile library to ir"),
     }?;
+    print!("{}\n", sway_ir::printer::to_string(&ctx));
     ctx.verify()
         .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))
 }

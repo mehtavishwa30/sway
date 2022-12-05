@@ -45,8 +45,8 @@ impl Pointer {
     }
 
     /// Return the type pointed to by this pointer.
-    pub fn get_type<'a>(&self, context: &'a Context) -> &'a Type {
-        &context.pointers[self.0].ty
+    pub fn get_type(&self, context: &Context) -> Type {
+        context.pointers[self.0].ty
     }
 
     /// Return the initializer for this pointer.
@@ -66,6 +66,6 @@ impl Pointer {
     }
 
     pub fn is_equivalent(&self, context: &Context, other: &Pointer) -> bool {
-        self.get_type(context).eq(context, other.get_type(context))
+        self.get_type(context).eq(context, &other.get_type(context))
     }
 }

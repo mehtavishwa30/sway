@@ -803,7 +803,7 @@ impl<'ir> AsmBuilder<'ir> {
             })
             .expect("BUG? Uninitialised pointer.");
         let ptr_ty_size_in_bytes =
-            ir_type_size_in_bytes(self.context, ptr_ty.get_type(self.context));
+            ir_type_size_in_bytes(self.context, &ptr_ty.get_type(self.context));
 
         let offset_in_bytes = word_offs * 8 + ptr_ty_size_in_bytes * offset;
         let instr_reg = self.reg_seqr.next();

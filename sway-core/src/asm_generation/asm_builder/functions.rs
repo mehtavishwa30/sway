@@ -472,7 +472,7 @@ impl<'ir> AsmBuilder<'ir> {
                         // Reserve space by incrementing the base.
                         stack_base += size_bytes_in_words!(ir_type_size_in_bytes(
                             self.context,
-                            ptr.get_type(self.context)
+                            &ptr.get_type(self.context)
                         ));
                     }
                 };

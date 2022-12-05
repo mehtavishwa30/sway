@@ -421,7 +421,7 @@ impl FnCompiler {
                 })?;
 
             // Convert the key pointer to a value using get_ptr
-            let key_ptr_ty = *key_ptr.get_type(context);
+            let key_ptr_ty = key_ptr.get_type(context);
             let key_ptr_val = compiler
                 .current_block
                 .ins(context)
@@ -931,7 +931,7 @@ impl FnCompiler {
                 None,
             )
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let ra_struct_ptr_ty = *ra_struct_ptr.get_type(context);
+        let ra_struct_ptr_ty = ra_struct_ptr.get_type(context);
         let ra_struct_val = self
             .current_block
             .ins(context)
@@ -1356,7 +1356,7 @@ impl FnCompiler {
             .get(name)
             .and_then(|local_name| self.function.get_local_ptr(context, local_name))
         {
-            let ptr_ty = *ptr.get_type(context);
+            let ptr_ty = ptr.get_type(context);
             let ptr_val = self
                 .current_block
                 .ins(context)
@@ -1446,7 +1446,7 @@ impl FnCompiler {
 
         // We can have empty aggregates, especially arrays, which shouldn't be initialised, but
         // otherwise use a store.
-        let ptr_ty = *ptr.get_type(context);
+        let ptr_ty = ptr.get_type(context);
         if ir_type_size_in_bytes(context, &ptr_ty) > 0 {
             let ptr_val = self
                 .current_block
@@ -1496,7 +1496,7 @@ impl FnCompiler {
 
         // We can have empty aggregates, especially arrays, which shouldn't be initialised, but
         // otherwise use a store.
-        let ptr_ty = *ptr.get_type(context);
+        let ptr_ty = ptr.get_type(context);
         if ir_type_size_in_bytes(context, &ptr_ty) > 0 {
             let ptr_val = self
                 .current_block
@@ -1526,7 +1526,7 @@ impl FnCompiler {
         // First look for a local ptr with the required name
         let val = match self.function.get_local_ptr(context, name) {
             Some(ptr) => {
-                let ptr_ty = *ptr.get_type(context);
+                let ptr_ty = ptr.get_type(context);
                 self.current_block
                     .ins(context)
                     .get_ptr(ptr, ptr_ty, 0)
@@ -1658,7 +1658,7 @@ impl FnCompiler {
             .function
             .new_local_ptr(context, temp_name, aggregate, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let array_ptr_ty = *array_ptr.get_type(context);
+        let array_ptr_ty = array_ptr.get_type(context);
         let array_value = self
             .current_block
             .ins(context)
@@ -1675,10 +1675,24 @@ impl FnCompiler {
                 .ins(context)
                 .get_elm_ptr_from_int_idx(array_value, aggregate, vec![0, idx as u64])
                 .add_metadatum(context, span_md_idx);
-            self.current_block
-                .ins(context)
-                .store(gep, elem_value)
-                .add_metadatum(context, span_md_idx);
+            let indexed_type = gep
+                .get_instruction(context)
+                .unwrap()
+                .gep_indexed_type(context);
+            match indexed_type {
+                Some(aggr) if aggr.is_aggregate(context) => {
+                    let byte_len = ir_type_size_in_bytes(context, &aggr);
+                    self.current_block
+                        .ins(context)
+                        .mem_copy(gep, elem_value, byte_len);
+                }
+                _ => {
+                    self.current_block
+                        .ins(context)
+                        .store(gep, elem_value)
+                        .add_metadatum(context, span_md_idx);
+                }
+            }
         }
         Ok(array_value)
     }
@@ -1801,7 +1815,7 @@ impl FnCompiler {
             .function
             .new_local_ptr(context, temp_name, aggregate, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let struct_ptr_ty = *struct_ptr.get_type(context);
+        let struct_ptr_ty = struct_ptr.get_type(context);
         let agg_value = self
             .current_block
             .ins(context)
@@ -1814,7 +1828,24 @@ impl FnCompiler {
                 .ins(context)
                 .get_elm_ptr_from_int_idx(agg_value, aggregate, vec![0, insert_idx])
                 .add_metadatum(context, span_md_idx);
-            self.current_block.ins(context).store(gep, insert_val);
+            let indexed_type = gep
+                .get_instruction(context)
+                .unwrap()
+                .gep_indexed_type(context);
+            match indexed_type {
+                Some(aggr) if aggr.is_aggregate(context) => {
+                    let byte_len = ir_type_size_in_bytes(context, &aggr);
+                    self.current_block
+                        .ins(context)
+                        .mem_copy(gep, insert_val, byte_len);
+                }
+                _ => {
+                    self.current_block
+                        .ins(context)
+                        .store(gep, insert_val)
+                        .add_metadatum(context, span_md_idx);
+                }
+            }
         }
         Ok(agg_value)
     }
@@ -1886,11 +1917,18 @@ impl FnCompiler {
             .ins(context)
             .get_elm_ptr_from_int_idx(struct_val, aggregate, vec![0, field_idx])
             .add_metadatum(context, span_md_idx);
-        Ok(self
-            .current_block
-            .ins(context)
-            .load(gep)
-            .add_metadatum(context, span_md_idx))
+        let indexed_type = gep
+            .get_instruction(context)
+            .unwrap()
+            .gep_indexed_type(context);
+        match indexed_type {
+            Some(aggr) if aggr.is_aggregate(context) => Ok(gep),
+            _ => Ok(self
+                .current_block
+                .ins(context)
+                .load(gep)
+                .add_metadatum(context, span_md_idx)),
+        }
     }
 
     fn compile_enum_expr(
@@ -1918,7 +1956,7 @@ impl FnCompiler {
             .function
             .new_local_ptr(context, temp_name, aggregate, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let enum_ptr_ty = *enum_ptr.get_type(context);
+        let enum_ptr_ty = enum_ptr.get_type(context);
         let enum_ptr_value = self
             .current_block
             .ins(context)
@@ -1997,7 +2035,7 @@ impl FnCompiler {
                 .map_err(|ir_error| {
                     CompileError::InternalOwned(ir_error.to_string(), Span::dummy())
                 })?;
-            let tuple_ptr_ty = *tuple_ptr.get_type(context);
+            let tuple_ptr_ty = tuple_ptr.get_type(context);
             let agg_value = self
                 .current_block
                 .ins(context)
@@ -2142,7 +2180,7 @@ impl FnCompiler {
                 .map_err(|ir_error| {
                     CompileError::InternalOwned(ir_error.to_string(), Span::dummy())
                 })?;
-            let struct_ptr_ty = *struct_ptr.get_type(context);
+            let struct_ptr_ty = struct_ptr.get_type(context);
             let struct_val = self
                 .current_block
                 .ins(context)
@@ -2197,7 +2235,7 @@ impl FnCompiler {
                 .add_metadatum(context, span_md_idx);
 
             // Convert the key pointer to a value using get_ptr
-            let key_ptr_ty = *key_ptr.get_type(context);
+            let key_ptr_ty = key_ptr.get_type(context);
             let mut key_ptr_val = self
                 .current_block
                 .ins(context)
@@ -2306,7 +2344,7 @@ impl FnCompiler {
                 .add_metadatum(context, span_md_idx);
 
             // Convert the key pointer to a value using get_ptr
-            let key_ptr_ty = *key_ptr.get_type(context);
+            let key_ptr_ty = key_ptr.get_type(context);
             let mut key_ptr_val = self
                 .current_block
                 .ins(context)
@@ -2553,7 +2591,7 @@ impl FnCompiler {
                 .add_metadatum(context, span_md_idx);
 
                 // Convert the key pointer to a value using get_ptr
-                let key_ptr_ty = *key_ptr.get_type(context);
+                let key_ptr_ty = key_ptr.get_type(context);
                 *key_ptr_val = self
                     .current_block
                     .ins(context)
@@ -2648,7 +2686,7 @@ impl FnCompiler {
                 .add_metadatum(context, span_md_idx);
 
                 // Convert the key pointer to a value using get_ptr
-                let key_ptr_ty = *key_ptr.get_type(context);
+                let key_ptr_ty = key_ptr.get_type(context);
                 *key_ptr_val = self
                     .current_block
                     .ins(context)

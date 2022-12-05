@@ -719,7 +719,7 @@ impl<'a> InstructionVerifier<'a> {
     fn get_pointer_type(&self, ptr_val: &Value) -> Option<Type> {
         match &self.context.values[ptr_val.0].value {
             ValueDatum::Instruction(Instruction::GetPointer { ptr_ty, .. }) => {
-                Some(*ptr_ty.get_type(self.context))
+                Some(ptr_ty.get_type(self.context))
             }
             ValueDatum::Instruction(Instruction::GetElmPtr {
                 pointee_ty,
