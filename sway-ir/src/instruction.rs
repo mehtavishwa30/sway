@@ -218,7 +218,7 @@ impl Instruction {
                 let ty = pointee_ty
                     .get_indexed_type(context, indices)
                     .expect("GetElmPtr indexing error");
-                Some(Type::get_pointer(context, Type::get_pointer(context, ty)))
+                Some(Type::get_pointer(context, ty))
             }
 
             // Used to re-interpret an integer as a pointer to some type so return the pointer type.
