@@ -432,7 +432,7 @@ impl FnCompiler {
             compiler
                 .current_block
                 .ins(context)
-                .store(key_ptr_val, value)
+                .mem_copy(key_ptr_val, value, 32)
                 .add_metadatum(context, span_md_idx);
             Ok(key_ptr_val)
         }
@@ -948,7 +948,7 @@ impl FnCompiler {
             .add_metadatum(context, span_md_idx);
         self.current_block
             .ins(context)
-            .store(gep, addr)
+            .mem_copy(gep, addr, 32)
             .add_metadatum(context, span_md_idx);
 
         // Convert selector to U64 and then insert it
@@ -1376,11 +1376,10 @@ impl FnCompiler {
                     .add_metadatum(context, span_md_idx)
             })
         } else if let Some(val) = self.function.get_arg(context, name) {
-            let is_ptr = val
+            let arg_ty = val
                 .get_type(context)
-                .filter(|f| f.is_ptr_type(context))
-                .is_some();
-            if is_ptr {
+                .expect("Arguments are always directly typed.");
+            if arg_ty.is_ptr_type(context) && arg_ty.strip_ptr_type(context).is_copy_type(context) {
                 Ok(self
                     .current_block
                     .ins(context)
@@ -1453,16 +1452,16 @@ impl FnCompiler {
                 .ins(context)
                 .get_ptr(ptr, ptr_ty, 0)
                 .add_metadatum(context, span_md_idx);
-            if ptr_ty.strip_ptr_type(context).is_aggregate(context) {
+            if ptr_ty.strip_ptr_type(context).is_copy_type(context) {
+                self.current_block
+                    .ins(context)
+                    .store(ptr_val, init_val)
+                    .add_metadatum(context, span_md_idx);
+            } else {
                 let size = ir_type_size_in_bytes(context, &ptr_ty.strip_ptr_type(context));
                 self.current_block
                     .ins(context)
                     .mem_copy(ptr_val, init_val, size)
-                    .add_metadatum(context, span_md_idx);
-            } else {
-                self.current_block
-                    .ins(context)
-                    .store(ptr_val, init_val)
                     .add_metadatum(context, span_md_idx);
             }
         }
@@ -1650,13 +1649,13 @@ impl FnCompiler {
         } else {
             convert_resolved_typeid_no_span(context, &contents[0].return_type)?
         };
-        let aggregate = Type::get_array(context, elem_type, contents.len() as u64);
+        let array_type = Type::get_array(context, elem_type, contents.len() as u64);
 
         // Compile each element and insert it immediately.
         let temp_name = self.lexical_map.insert_anon();
         let array_ptr = self
             .function
-            .new_local_ptr(context, temp_name, aggregate, false, None)
+            .new_local_ptr(context, temp_name, array_type, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
         let array_ptr_ty = array_ptr.get_type(context);
         let array_value = self
@@ -1673,25 +1672,18 @@ impl FnCompiler {
             let gep = self
                 .current_block
                 .ins(context)
-                .get_elm_ptr_from_int_idx(array_value, aggregate, vec![0, idx as u64])
+                .get_elm_ptr_from_int_idx(array_value, array_type, vec![0, idx as u64])
                 .add_metadatum(context, span_md_idx);
-            let indexed_type = gep
-                .get_instruction(context)
-                .unwrap()
-                .gep_indexed_type(context);
-            match indexed_type {
-                Some(aggr) if aggr.is_aggregate(context) => {
-                    let byte_len = ir_type_size_in_bytes(context, &aggr);
-                    self.current_block
-                        .ins(context)
-                        .mem_copy(gep, elem_value, byte_len);
-                }
-                _ => {
-                    self.current_block
-                        .ins(context)
-                        .store(gep, elem_value)
-                        .add_metadatum(context, span_md_idx);
-                }
+            if elem_type.is_copy_type(context) {
+                self.current_block
+                    .ins(context)
+                    .store(gep, elem_value)
+                    .add_metadatum(context, span_md_idx);
+            } else {
+                let byte_len = ir_type_size_in_bytes(context, &elem_type);
+                self.current_block
+                    .ins(context)
+                    .mem_copy(gep, elem_value, byte_len);
             }
         }
         Ok(array_value)
@@ -1831,20 +1823,18 @@ impl FnCompiler {
             let indexed_type = gep
                 .get_instruction(context)
                 .unwrap()
-                .gep_indexed_type(context);
-            match indexed_type {
-                Some(aggr) if aggr.is_aggregate(context) => {
-                    let byte_len = ir_type_size_in_bytes(context, &aggr);
-                    self.current_block
-                        .ins(context)
-                        .mem_copy(gep, insert_val, byte_len);
-                }
-                _ => {
-                    self.current_block
-                        .ins(context)
-                        .store(gep, insert_val)
-                        .add_metadatum(context, span_md_idx);
-                }
+                .gep_indexed_type(context)
+                .unwrap();
+            if indexed_type.is_copy_type(context) {
+                self.current_block
+                    .ins(context)
+                    .store(gep, insert_val)
+                    .add_metadatum(context, span_md_idx);
+            } else {
+                let byte_len = ir_type_size_in_bytes(context, &indexed_type);
+                self.current_block
+                    .ins(context)
+                    .mem_copy(gep, insert_val, byte_len);
             }
         }
         Ok(agg_value)
@@ -1868,8 +1858,8 @@ impl FnCompiler {
                         ast_struct_expr_span)
                 })
         } else if let Some(agg_ty) = struct_val.get_argument_type(context) {
-            if agg_ty.is_struct(context) {
-                Ok(agg_ty)
+            if agg_ty.strip_ptr_type(context).is_struct(context) {
+                Ok(agg_ty.strip_ptr_type(context))
             } else {
                 Err(CompileError::InternalOwned(
                     "Unsupported struct value for field expression.".to_owned(),
@@ -1996,7 +1986,19 @@ impl FnCompiler {
                         .ins(context)
                         .get_elm_ptr_from_int_idx(enum_ptr_value, aggregate, vec![0, 1])
                         .add_metadatum(context, span_md_idx);
-                    self.current_block.ins(context).store(value_gep, te);
+
+                    let te_type = te.get_type(context).ok_or_else(|| {
+                        CompileError::Internal("Enum initialiser must have a type.", enum_decl.span)
+                    })?;
+
+                    if te_type.is_copy_type(context) {
+                        self.current_block.ins(context).store(value_gep, te);
+                    } else {
+                        let byte_len = ir_type_size_in_bytes(context, &te_type);
+                        self.current_block
+                            .ins(context)
+                            .mem_copy(value_gep, te, byte_len);
+                    }
                     enum_ptr_value
                 }
             }
@@ -2027,7 +2029,7 @@ impl FnCompiler {
                 init_types.push(init_type);
             }
 
-            let aggregate = Type::get_struct(context, init_types);
+            let aggregate = Type::get_struct(context, init_types.clone());
             let temp_name = self.lexical_map.insert_anon();
             let tuple_ptr = self
                 .function
@@ -2042,13 +2044,22 @@ impl FnCompiler {
                 .get_ptr(tuple_ptr, tuple_ptr_ty, 0)
                 .add_metadatum(context, span_md_idx);
 
-            for (insert_idx, insert_val) in init_values.into_iter().enumerate() {
+            for (insert_idx, (insert_val, insert_type)) in
+                init_values.into_iter().zip(init_types).enumerate()
+            {
                 let gep = self
                     .current_block
                     .ins(context)
                     .get_elm_ptr_from_int_idx(agg_value, aggregate, vec![0, insert_idx as u64])
                     .add_metadatum(context, span_md_idx);
-                self.current_block.ins(context).store(gep, insert_val);
+                if insert_type.is_copy_type(context) {
+                    self.current_block.ins(context).store(gep, insert_val);
+                } else {
+                    let byte_size = ir_type_size_in_bytes(context, &insert_type);
+                    self.current_block
+                        .ins(context)
+                        .mem_copy(gep, insert_val, byte_size);
+                }
             }
             Ok(agg_value)
         }
@@ -2209,7 +2220,14 @@ impl FnCompiler {
                     .ins(context)
                     .get_elm_ptr_from_int_idx(struct_val, *ty, vec![0, field_idx])
                     .add_metadatum(context, span_md_idx);
-                self.current_block.ins(context).store(gep, val_to_insert);
+                if field_type.is_copy_type(context) {
+                    self.current_block.ins(context).store(gep, val_to_insert);
+                } else {
+                    let byte_size = ir_type_size_in_bytes(context, &field_type);
+                    self.current_block
+                        .ins(context)
+                        .mem_copy(gep, val_to_insert, byte_size);
+                }
             }
             Ok(struct_val)
         } else {
@@ -2245,7 +2263,7 @@ impl FnCompiler {
             // Store the const hash value to the key pointer value
             self.current_block
                 .ins(context)
-                .store(key_ptr_val, const_key)
+                .mem_copy(key_ptr_val, const_key, 32)
                 .add_metadatum(context, span_md_idx);
 
             match &content {
@@ -2308,7 +2326,16 @@ impl FnCompiler {
                     .ins(context)
                     .get_elm_ptr_from_int_idx(rhs, *ty, vec![0, field_idx])
                     .add_metadatum(context, span_md_idx);
-                let load = self.current_block.ins(context).load(gep);
+
+                let extracted_value = if gep
+                    .get_type(context)
+                    .map(|ty| ty.strip_ptr_type(context).is_copy_type(context))
+                    .unwrap_or(false)
+                {
+                    self.current_block.ins(context).load(gep)
+                } else {
+                    gep
+                };
 
                 self.compile_storage_write(
                     context,
@@ -2316,7 +2343,7 @@ impl FnCompiler {
                     ix,
                     &new_indices,
                     &field_type,
-                    load,
+                    extracted_value,
                     span_md_idx,
                 )?;
             }
@@ -2354,7 +2381,7 @@ impl FnCompiler {
             // Store the const hash value to the key pointer value
             self.current_block
                 .ins(context)
-                .store(key_ptr_val, const_key)
+                .mem_copy(key_ptr_val, const_key, 32)
                 .add_metadatum(context, span_md_idx);
 
             match &content {
@@ -2453,14 +2480,14 @@ impl FnCompiler {
         for ix in indices {
             value_name = format!("{}_{}", value_name, ix);
         }
-        let alias_value_name = self.lexical_map.insert(value_name.as_str().to_owned());
+        let local_value_name = self.lexical_map.insert(value_name.as_str().to_owned());
 
         // Local pointer to hold the B256
         let value_ptr = self
             .function
             .new_local_ptr(
                 context,
-                alias_value_name,
+                local_value_name,
                 Type::get_b256(context),
                 true,
                 None,
@@ -2497,14 +2524,14 @@ impl FnCompiler {
         for ix in indices {
             value_name = format!("{}_{}", value_name, ix);
         }
-        let alias_value_name = self.lexical_map.insert(value_name.as_str().to_owned());
+        let local_value_name = self.lexical_map.insert(value_name.as_str().to_owned());
 
         // Local pointer to hold the B256
         let value_ptr = self
             .function
             .new_local_ptr(
                 context,
-                alias_value_name,
+                local_value_name,
                 Type::get_b256(context),
                 true,
                 None,
@@ -2522,7 +2549,7 @@ impl FnCompiler {
         // Store the value to the local pointer created for rhs
         self.current_block
             .ins(context)
-            .store(value_ptr_val, rhs)
+            .mem_copy(value_ptr_val, rhs, 32)
             .add_metadatum(context, span_md_idx);
 
         // Finally, just call state_load_quad_word/state_store_quad_word
@@ -2558,7 +2585,7 @@ impl FnCompiler {
                 .collect::<Vec<_>>()
                 .join("")
         );
-        let alias_value_name = self.lexical_map.insert(value_name);
+        let local_value_name = self.lexical_map.insert(value_name);
 
         // Create an array of `b256` that will hold the value to store into storage
         // or the value loaded from storage. The array has to fit the whole type.
@@ -2568,7 +2595,7 @@ impl FnCompiler {
         // Local pointer to hold the array of b256s
         let value_ptr = self
             .function
-            .new_local_ptr(context, alias_value_name, b256_array_type, true, None)
+            .new_local_ptr(context, local_value_name, b256_array_type, true, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
 
         // Convert the local pointer created to a value of the original type using
@@ -2601,7 +2628,7 @@ impl FnCompiler {
                 // Store the const hash value to the key pointer value
                 self.current_block
                     .ins(context)
-                    .store(*key_ptr_val, const_key)
+                    .mem_copy(*key_ptr_val, const_key, 32)
                     .add_metadatum(context, span_md_idx);
             }
 
@@ -2647,7 +2674,7 @@ impl FnCompiler {
                 .collect::<Vec<_>>()
                 .join("")
         );
-        let alias_value_name = self.lexical_map.insert(value_name);
+        let local_value_name = self.lexical_map.insert(value_name);
 
         // Create an array of `b256` that will hold the value to store into storage
         // or the value loaded from storage. The array has to fit the whole type.
@@ -2657,7 +2684,7 @@ impl FnCompiler {
         // Local pointer to hold the array of b256s
         let value_ptr = self
             .function
-            .new_local_ptr(context, alias_value_name, b256_array_type, true, None)
+            .new_local_ptr(context, local_value_name, b256_array_type, true, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
 
         // Convert the local pointer created to a value of the original type using
@@ -2669,10 +2696,18 @@ impl FnCompiler {
             .add_metadatum(context, span_md_idx);
 
         // Store the value to the local pointer created for rhs
-        self.current_block
-            .ins(context)
-            .store(value_ptr_val, rhs)
-            .add_metadatum(context, span_md_idx);
+        if r#type.is_copy_type(context) {
+            self.current_block
+                .ins(context)
+                .store(value_ptr_val, rhs)
+                .add_metadatum(context, span_md_idx);
+        } else {
+            let byte_size = ir_type_size_in_bytes(context, &r#type);
+            self.current_block
+                .ins(context)
+                .mem_copy(value_ptr_val, rhs, byte_size)
+                .add_metadatum(context, span_md_idx);
+        }
 
         for array_index in 0..number_of_elements {
             if array_index > 0 {
@@ -2696,7 +2731,7 @@ impl FnCompiler {
                 // Store the const hash value to the key pointer value
                 self.current_block
                     .ins(context)
-                    .store(*key_ptr_val, const_key)
+                    .mem_copy(*key_ptr_val, const_key, 32)
                     .add_metadatum(context, span_md_idx);
             }
 

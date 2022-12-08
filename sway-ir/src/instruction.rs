@@ -478,10 +478,12 @@ impl Instruction {
 
     pub fn gep_indexed_type(&self, context: &Context) -> Option<Type> {
         match self {
-            Instruction::GetElmPtr { ptr: _, pointee_ty, indices } => {
-                pointee_ty.get_indexed_type(context, indices)
-            }
-            _ => None
+            Instruction::GetElmPtr {
+                ptr: _,
+                pointee_ty,
+                indices,
+            } => pointee_ty.get_indexed_type(context, indices),
+            _ => None,
         }
     }
 }

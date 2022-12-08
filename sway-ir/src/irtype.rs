@@ -163,20 +163,17 @@ impl Type {
         }
     }
 
-    pub fn strip_ptr_type(&self, context: &Context) -> Type {
-        if let TypeContent::Pointer(pointee_ty) = *self.get_content(context) {
-            pointee_ty
-        } else {
-            *self
-        }
-    }
-
     /// Gets the inner pointer type if its a pointer.
     pub fn get_inner_ptr_type(&self, context: &Context) -> Option<Type> {
         match *self.get_content(context) {
             TypeContent::Pointer(pointee_typ) => Some(pointee_typ),
             _ => None,
         }
+    }
+
+    /// If this type is a pointer then return the pointed to type, else return self.
+    pub fn strip_ptr_type(&self, context: &Context) -> Type {
+        self.get_inner_ptr_type(context).unwrap_or(*self)
     }
 
     /// Is unit type

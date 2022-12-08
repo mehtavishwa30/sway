@@ -493,10 +493,7 @@ impl<'a> InstructionVerifier<'a> {
         match ptr.get_type(self.context) {
             Some(ty)
                 if ty.is_ptr_type(self.context)
-                    && ty
-                        .get_inner_ptr_type(self.context)
-                        .unwrap()
-                        .eq(self.context, pointee_ty) =>
+                    && ty.strip_ptr_type(self.context).eq(self.context, pointee_ty) =>
             {
                 // TODO: Verify ConstantValue::Uint indices for structs.
                 Ok(())

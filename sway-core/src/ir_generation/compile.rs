@@ -236,7 +236,14 @@ fn compile_fn_with_args(
 
     let mut args = args
         .into_iter()
-        .map(|(name, ty, span)| (name, ty, md_mgr.span_to_md(context, &span)))
+        .map(|(name, ty, span)| {
+            // Wrap non-copy types in a pointer.
+            let arg_ty = match ty.is_copy_type(context) {
+                true => ty,
+                false => Type::get_pointer(context, ty),
+            };
+            (name, arg_ty, md_mgr.span_to_md(context, &span))
+        })
         .collect::<Vec<_>>();
 
     let ret_type = convert_resolved_typeid(context, &return_type, &return_type_span)?;
