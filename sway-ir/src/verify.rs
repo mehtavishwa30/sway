@@ -3,6 +3,8 @@
 //! During creation, deserialization and optimization the IR should be verified to be in a
 //! consistent valid state, using the functions in this module.
 
+use std::borrow::Borrow;
+
 use crate::{
     block::BlockContent,
     context::Context,
@@ -690,7 +692,8 @@ impl<'a> InstructionVerifier<'a> {
         let stored_ty = stored_val.get_stripped_ptr_type(self.context);
         if dst_ty.is_none() {
             Err(IrError::VerifyStoreToNonPointer)
-        } else if !dst_ty.unwrap().is_copy_type(self.context) {
+        } else if !stored_ty.map_or_else(|| false, |stored_ty| stored_ty.is_copy_type(self.context))
+        {
             Err(IrError::VerifyStoreOfNonCopyType)
         } else if self.opt_ty_not_eq(&dst_ty, &stored_ty) {
             Err(IrError::VerifyStoreMismatchedTypes)
