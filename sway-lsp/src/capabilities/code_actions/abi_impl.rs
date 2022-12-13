@@ -94,3 +94,65 @@ fn get_contract_impl_string(abi_decl: TyAbiDeclaration) -> String {
         get_function_signatures(abi_decl).as_str()
     )
 }
+
+// TEST: get_contract_impl_string
+
+// TEST: get_function_signatures
+
+// TEST abi_impl_code_action
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use sway_core::{
+        declaration_engine::declaration_wrapper::DeclarationWrapper,
+        language::ty::{TyAbiDeclaration, TyTraitFn},
+    };
+    use sway_types::{BaseIdent, Span};
+
+    use super::*;
+
+    #[test]
+    fn get_function_signatures_returns_empty_string() {
+        let empty_span = Span::new("".into(), 0, 0, None).unwrap();
+        let abi_decl = TyAbiDeclaration {
+            name: BaseIdent::new(empty_span.clone()),
+            interface_surface: vec![],
+            methods: vec![],
+            span: empty_span.clone(),
+            attributes: Arc::new(HashMap::new()),
+        };
+        let result = get_function_signatures(abi_decl);
+        assert!(result == "".to_string(), "result = {:?}", result);
+    }
+
+    #[test]
+    fn get_function_signatures_returns_one_fn() {
+        let de = declaration_engine::declaration_engine::DeclarationEngine::default();
+        let empty_span = Span::new("".into(), 0, 0, None).unwrap();
+        let trait_fn = TyTraitFn {
+            name: BaseIdent::new(empty_span.clone()),
+            purity: sway_core::language::Purity::Pure,
+            parameters: vec![],
+            return_type: 42usize.into(),
+            return_type_span: empty_span.clone(),
+            attributes: Arc::new(HashMap::new()),
+        };
+        let decl_id = declaration_engine::declaration_engine::DeclarationEngine::insert(
+            &de,
+            DeclarationWrapper::TraitFn(trait_fn),
+            empty_span.clone(),
+        );
+        let abi_decl = TyAbiDeclaration {
+            name: BaseIdent::new(empty_span.clone()),
+            interface_surface: vec![decl_id],
+            methods: vec![],
+            span: empty_span.clone(),
+            attributes: Arc::new(HashMap::new()),
+        };
+
+        let result = get_function_signatures(abi_decl);
+        assert!(result == "".to_string(), "result = {:?}", result);
+    }
+}

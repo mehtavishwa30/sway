@@ -11,7 +11,7 @@ use crate::{
 #[derivative(PartialEq, Eq)]
 pub struct TyTraitFn {
     pub name: Ident,
-    pub(crate) purity: Purity,
+    pub purity: Purity,
     pub parameters: Vec<TyFunctionParameter>,
     pub return_type: TypeId,
     #[derivative(PartialEq = "ignore")]

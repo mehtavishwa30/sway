@@ -561,7 +561,7 @@ impl Backend {
                                         }
                                     }
 
-                                    let tmp_ast_path = Path::new("/tmp/parsed_ast.rs");
+                                    let tmp_ast_path = Path::new("/");
                                     Ok(write_ast_to_file(tmp_ast_path, &formatted_ast))
                                 }
                                 _ => Ok(None),

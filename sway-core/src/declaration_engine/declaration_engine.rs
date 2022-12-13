@@ -44,7 +44,7 @@ impl DeclarationEngine {
         self.slab.replace(index, wrapper);
     }
 
-    fn insert(&self, declaration_wrapper: DeclarationWrapper, span: Span) -> DeclarationId {
+    pub fn insert(&self, declaration_wrapper: DeclarationWrapper, span: Span) -> DeclarationId {
         DeclarationId::new(self.slab.insert(declaration_wrapper), span)
     }
 

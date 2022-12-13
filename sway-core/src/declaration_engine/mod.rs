@@ -10,9 +10,9 @@
 
 pub(crate) mod decl_mapping;
 #[allow(clippy::module_inception)]
-pub(crate) mod declaration_engine;
+pub mod declaration_engine;
 pub(crate) mod declaration_id;
-pub(crate) mod declaration_wrapper;
+pub mod declaration_wrapper;
 pub(crate) mod replace_declaration_id;
 
 pub(crate) use decl_mapping::*;
