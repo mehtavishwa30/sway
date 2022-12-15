@@ -7,6 +7,7 @@ use std::{cell::RefCell, collections::HashMap};
 use rustc_hash::FxHashMap;
 
 use crate::{
+    analysis,
     asm::AsmArg,
     block::Block,
     context::Context,
@@ -208,6 +209,9 @@ pub fn inline_function_call(
     // Now remove the call altogether.
     context.values.remove(call_site.0);
 
+    // To ensure that we process definitions before uses, we traverse in reverse-post-order.
+    let inlined_post_order = analysis::dominator::compute_post_order(context, &inlined_function);
+
     // Insert empty blocks from the inlined function between our split blocks, and create a mapping
     // from old blocks to new.  We need this when inlining branch instructions, so they branch to
     // the new blocks.
@@ -217,10 +221,7 @@ pub fn inline_function_call(
     // a new one (with a redundant branch to it from the `pre_block`).
     let inlined_fn_name = inlined_function.get_name(context).to_owned();
     let mut block_map = HashMap::new();
-    let mut block_iter = context.functions[inlined_function.0]
-        .blocks
-        .clone()
-        .into_iter();
+    let mut block_iter = inlined_post_order.po_to_block.iter().cloned().rev();
     block_map.insert(block_iter.next().unwrap(), pre_block);
     block_map = block_iter.fold(block_map, |mut block_map, inlined_block| {
         let inlined_block_label = inlined_block.get_label(context);
@@ -254,8 +255,8 @@ pub fn inline_function_call(
     // old values (locals and args at this stage) to new values.  We can copy instructions over,
     // translating their blocks and values to refer to the new ones.  The value map is still live
     // as we add new instructions which replace the old ones to it too.
-    let inlined_blocks = context.functions[inlined_function.0].blocks.clone();
-    for block in &inlined_blocks {
+    let inlined_blocks = inlined_post_order.po_to_block.iter().rev();
+    for block in inlined_blocks {
         for ins in context.blocks[block.0].instructions.clone() {
             inline_instruction(
                 context,
