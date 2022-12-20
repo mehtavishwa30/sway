@@ -9,12 +9,12 @@ use crate::{
     error::IrError,
     function::{Function, FunctionContent},
     instruction::{FuelVmInstruction, Instruction, Predicate},
-    irtype::{Aggregate, Type},
+    irtype::Type,
     metadata::{MetadataIndex, Metadatum},
     module::ModuleContent,
     pointer::Pointer,
     value::{Value, ValueDatum},
-    BinaryOpKind, BlockArgument, BranchToWithArgs,
+    BinaryOpKind, BlockArgument, BranchToWithArgs, TypeContent,
 };
 
 impl Context {
@@ -135,7 +135,7 @@ impl<'a> InstructionVerifier<'a> {
             let value_content = &self.context.values[ins.0];
             if let ValueDatum::Instruction(instruction) = &value_content.value {
                 match instruction {
-                    Instruction::AddrOf(arg) => self.verify_addr_of(arg)?,
+                    Instruction::AddrOf(arg, _ty) => self.verify_addr_of(arg)?,
                     Instruction::AsmBlock(..) => (),
                     Instruction::BitCast(value, ty) => self.verify_bitcast(value, ty)?,
                     Instruction::BinaryOp { op, arg1, arg2 } => {
@@ -143,9 +143,12 @@ impl<'a> InstructionVerifier<'a> {
                     }
                     Instruction::Branch(block) => self.verify_br(block)?,
                     Instruction::Call(func, args) => self.verify_call(func, args)?,
-                    Instruction::Cmp(pred, lhs_value, rhs_value) => {
-                        self.verify_cmp(pred, lhs_value, rhs_value)?
-                    }
+                    Instruction::Cmp {
+                        pred,
+                        lhs_value,
+                        rhs_value,
+                        ret_ty: _,
+                    } => self.verify_cmp(pred, lhs_value, rhs_value)?,
                     Instruction::ConditionalBranch {
                         cond_value,
                         true_block,
@@ -160,53 +163,14 @@ impl<'a> InstructionVerifier<'a> {
                     } => self.verify_contract_call(params, coins, asset_id, gas)?,
                     Instruction::ExtractElement {
                         array,
-                        ty,
+                        array_ty,
                         index_val,
-                    } => self.verify_extract_element(array, ty, index_val)?,
+                    } => self.verify_extract_element(array, array_ty, index_val)?,
                     Instruction::ExtractValue {
                         aggregate,
-                        ty,
+                        struct_ty,
                         indices,
-                    } => self.verify_extract_value(aggregate, ty, indices)?,
-                    Instruction::FuelVm(fuel_vm_instr) => match fuel_vm_instr {
-                        FuelVmInstruction::GetStorageKey => (),
-                        FuelVmInstruction::Gtf { index, tx_field_id } => {
-                            self.verify_gtf(index, tx_field_id)?
-                        }
-                        FuelVmInstruction::Log {
-                            log_val,
-                            log_ty,
-                            log_id,
-                        } => self.verify_log(log_val, log_ty, log_id)?,
-                        FuelVmInstruction::ReadRegister(_) => (),
-                        FuelVmInstruction::Revert(val) => self.verify_revert(val)?,
-                        FuelVmInstruction::Smo {
-                            recipient_and_message,
-                            message_size,
-                            output_index,
-                            coins,
-                        } => self.verify_smo(
-                            recipient_and_message,
-                            message_size,
-                            output_index,
-                            coins,
-                        )?,
-                        FuelVmInstruction::StateLoadWord(key) => {
-                            self.verify_state_load_word(key)?
-                        }
-                        FuelVmInstruction::StateLoadQuadWord {
-                            load_val: dst_val,
-                            key,
-                        }
-                        | FuelVmInstruction::StateStoreQuadWord {
-                            stored_val: dst_val,
-                            key,
-                        } => self.verify_state_load_store(dst_val, &Type::B256, key)?,
-                        FuelVmInstruction::StateStoreWord {
-                            stored_val: dst_val,
-                            key,
-                        } => self.verify_state_store_word(dst_val, key)?,
-                    },
+                    } => self.verify_extract_value(aggregate, struct_ty, indices)?,
                     Instruction::GetPointer {
                         base_ptr,
                         ptr_ty,
@@ -214,29 +178,78 @@ impl<'a> InstructionVerifier<'a> {
                     } => self.verify_get_ptr(base_ptr, ptr_ty, offset)?,
                     Instruction::InsertElement {
                         array,
-                        ty,
+                        array_ty,
                         value,
                         index_val,
-                    } => self.verify_insert_element(array, ty, value, index_val)?,
+                    } => self.verify_insert_element(array, array_ty, value, index_val)?,
                     Instruction::InsertValue {
                         aggregate,
-                        ty,
+                        struct_ty,
                         value,
                         indices,
-                    } => self.verify_insert_value(aggregate, ty, value, indices)?,
+                    } => self.verify_insert_value(aggregate, struct_ty, value, indices)?,
                     Instruction::IntToPtr(value, ty) => self.verify_int_to_ptr(value, ty)?,
                     Instruction::Load(ptr) => self.verify_load(ptr)?,
                     Instruction::MemCopy {
                         dst_val,
                         src_val,
                         byte_len,
+                        ret_ty: _,
                     } => self.verify_mem_copy(dst_val, src_val, byte_len)?,
                     Instruction::Nop => (),
                     Instruction::Ret(val, ty) => self.verify_ret(val, ty)?,
                     Instruction::Store {
                         dst_val,
                         stored_val,
+                        ret_ty: _,
                     } => self.verify_store(dst_val, stored_val)?,
+
+                    Instruction::FuelVm(fuel_instr) => match fuel_instr {
+                        FuelVmInstruction::GetStorageKey(_ty) => (),
+                        FuelVmInstruction::Gtf {
+                            index,
+                            tx_field_id,
+                            ret_ty: _,
+                        } => self.verify_gtf(index, tx_field_id)?,
+                        FuelVmInstruction::Log {
+                            log_val,
+                            log_ty,
+                            log_id,
+                            ret_ty: _,
+                        } => self.verify_log(log_val, log_ty, log_id)?,
+                        FuelVmInstruction::ReadRegister(..) => (),
+                        FuelVmInstruction::Revert(val) => self.verify_revert(val)?,
+                        FuelVmInstruction::Smo {
+                            recipient_and_message,
+                            message_size,
+                            output_index,
+                            coins,
+                            ret_ty: _,
+                        } => self.verify_smo(
+                            recipient_and_message,
+                            message_size,
+                            output_index,
+                            coins,
+                        )?,
+                        FuelVmInstruction::StateLoadWord(key, _ty) => {
+                            self.verify_state_load_word(key)?
+                        }
+                        FuelVmInstruction::StateLoadQuadWord {
+                            load_val: dst_val,
+                            key,
+                            ret_ty: _,
+                        }
+                        | FuelVmInstruction::StateStoreQuadWord {
+                            stored_val: dst_val,
+                            key,
+                            ret_ty: _,
+                        } => self.verify_state_load_store(dst_val, key)?,
+                        FuelVmInstruction::StateStoreWord {
+                            stored_val: dst_val,
+                            key,
+                            ret_ty: _,
+                        } => self.verify_state_store_word(dst_val, key)?,
+                    },
                 };
 
                 // Verify the instruction metadata too.
@@ -252,46 +265,46 @@ impl<'a> InstructionVerifier<'a> {
         let val_ty = value
             .get_stripped_ptr_type(self.context)
             .ok_or(IrError::VerifyAddrOfUnknownSourceType)?;
-        if val_ty.is_copy_type() {
+        if val_ty.is_copy_type(self.context) {
             return Err(IrError::VerifyAddrOfCopyType);
         }
         Ok(())
     }
 
-    fn verify_bitcast(&self, value: &Value, ty: &Type) -> Result<(), IrError> {
+    fn verify_bitcast(&self, value: &Value, to_ty: &Type) -> Result<(), IrError> {
         // The to and from types must be copy-types, excluding short strings, and the same size.
         let val_ty = value
             .get_type(self.context)
             .ok_or(IrError::VerifyBitcastUnknownSourceType)?;
-        if !val_ty.is_copy_type() {
+        if !val_ty.is_copy_type(self.context) {
             return Err(IrError::VerifyBitcastFromNonCopyType(
                 val_ty.as_string(self.context),
             ));
         }
-        if !ty.is_copy_type() {
+        if !to_ty.is_copy_type(self.context) {
             return Err(IrError::VerifyBitcastToNonCopyType(
                 val_ty.as_string(self.context),
             ));
         }
-        let is_valid = match val_ty {
-            Type::Unit | Type::Bool => true, // Unit or bool to any copy type works.
-            Type::Uint(from_nbits) => match ty {
-                Type::Unit | Type::Bool => true, // We can construct a unit or bool from any sized integer.
-                Type::Uint(to_nbits) => from_nbits == *to_nbits,
+        let is_valid = match val_ty.get_content(self.context) {
+            TypeContent::Unit | TypeContent::Bool => true, // Unit or bool to any copy type works.
+            TypeContent::Uint(from_nbits) => match to_ty.get_content(self.context) {
+                TypeContent::Unit | TypeContent::Bool => true, // We can construct a unit or bool from any sized integer.
+                TypeContent::Uint(to_nbits) => from_nbits == to_nbits,
                 _otherwise => false,
             },
-            Type::B256
-            | Type::String(_)
-            | Type::Array(_)
-            | Type::Union(_)
-            | Type::Struct(_)
-            | Type::Pointer(_)
-            | Type::Slice => false,
+            TypeContent::B256
+            | TypeContent::String(_)
+            | TypeContent::Array(..)
+            | TypeContent::Union(_)
+            | TypeContent::Struct(_)
+            | TypeContent::Pointer { .. }
+            | TypeContent::Slice => false,
         };
         if !is_valid {
             Err(IrError::VerifyBitcastBetweenInvalidTypes(
                 val_ty.as_string(self.context),
-                ty.as_string(self.context),
+                to_ty.as_string(self.context),
             ))
         } else {
             Ok(())
@@ -310,7 +323,7 @@ impl<'a> InstructionVerifier<'a> {
         let arg2_ty = arg2
             .get_type(self.context)
             .ok_or(IrError::VerifyBinaryOpIncorrectArgType)?;
-        if !arg1_ty.eq(self.context, &arg2_ty) || !matches!(arg1_ty, Type::Uint(_)) {
+        if !arg1_ty.eq(self.context, &arg2_ty) || !arg1_ty.is_uint(self.context) {
             return Err(IrError::VerifyBinaryOpIncorrectArgType);
         }
 
@@ -360,7 +373,8 @@ impl<'a> InstructionVerifier<'a> {
                 }
 
                 let caller_arg_type = opt_caller_arg_type.as_ref().unwrap();
-                let is_ref_call = !callee_arg_type.is_copy_type() && caller_arg_type.is_ptr_type();
+                let is_ref_call = !callee_arg_type.is_copy_type(self.context)
+                    && caller_arg_type.is_ptr_type(self.context);
                 if !caller_arg_type.eq(self.context, callee_arg_type) && !is_ref_call {
                     return Err(IrError::VerifyCallArgTypeMismatch(
                         callee_content.name.clone(),
@@ -399,7 +413,10 @@ impl<'a> InstructionVerifier<'a> {
         true_block: &BranchToWithArgs,
         false_block: &BranchToWithArgs,
     ) -> Result<(), IrError> {
-        if !matches!(cond_val.get_type(self.context), Some(Type::Bool)) {
+        if !(cond_val
+            .get_type(self.context)
+            .map_or(false, |t| t.is_bool(self.context)))
+        {
             Err(IrError::VerifyConditionExprNotABool)
         } else if !self.cur_function.blocks.contains(&true_block.block) {
             Err(IrError::VerifyBranchToMissingBlock(
@@ -426,8 +443,11 @@ impl<'a> InstructionVerifier<'a> {
             lhs_value.get_type(self.context),
             rhs_value.get_type(self.context),
         ) {
-            (Some(lhs_ty), Some(rhs_ty)) => match (lhs_ty, rhs_ty) {
-                (Type::Uint(lhs_nbits), Type::Uint(rhs_nbits)) => {
+            (Some(lhs_ty), Some(rhs_ty)) => match (
+                lhs_ty.get_content(self.context),
+                rhs_ty.get_content(self.context),
+            ) {
+                (TypeContent::Uint(lhs_nbits), TypeContent::Uint(rhs_nbits)) => {
                     if lhs_nbits != rhs_nbits {
                         Err(IrError::VerifyCmpTypeMismatch(
                             lhs_ty.as_string(self.context),
@@ -437,7 +457,9 @@ impl<'a> InstructionVerifier<'a> {
                         Ok(())
                     }
                 }
-                (Type::Bool, Type::Bool) => Ok(()),
+
+                (TypeContent::Bool, TypeContent::Bool) => Ok(()),
+
                 _otherwise => Err(IrError::VerifyCmpBadTypes(
                     lhs_ty.as_string(self.context),
                     rhs_ty.as_string(self.context),
@@ -458,36 +480,49 @@ impl<'a> InstructionVerifier<'a> {
         //   user args.
         // - The coins and gas must be u64s.
         // - The asset_id must be a B256
-        if let Some(Type::Struct(agg)) = params.get_stripped_ptr_type(self.context) {
-            let fields = self.context.aggregates[agg.0].field_types();
-            if fields.len() != 3
-                || !fields[0].eq(self.context, &Type::B256)
-                || !fields[1].eq(self.context, &Type::Uint(64))
-                || !fields[2].eq(self.context, &Type::Uint(64))
-            {
-                Err(IrError::VerifyContractCallBadTypes("params".to_owned()))
-            } else {
-                Ok(())
+        if let Some(params_ty) = params
+            .get_stripped_ptr_type(self.context)
+            .map(|t| t.get_content(self.context))
+        {
+            match params_ty {
+                TypeContent::Struct(fields)
+                    if fields.len() == 3
+                        && fields[0].is_b256(self.context)
+                        && fields[1].is_uint_of(self.context, 64)
+                        && fields[2].is_uint_of(self.context, 64) =>
+                {
+                    Ok(())
+                }
+                _ => Err(IrError::VerifyContractCallBadTypes("params".to_owned())),
             }
         } else {
             Err(IrError::VerifyContractCallBadTypes("params".to_owned()))
         }
         .and_then(|_| {
-            if let Some(Type::Uint(64)) = coins.get_type(self.context) {
+            if coins
+                .get_type(self.context)
+                .map_or(false, |t| t.is_uint_of(self.context, 64))
+            {
                 Ok(())
             } else {
                 Err(IrError::VerifyContractCallBadTypes("coins".to_owned()))
             }
         })
         .and_then(|_| {
-            if let Some(Type::B256) = asset_id.get_type(self.context) {
+            if asset_id
+                .get_type(self.context)
+                .map_or(false, |t| t.is_b256(self.context))
+            {
                 Ok(())
             } else {
                 Err(IrError::VerifyContractCallBadTypes("asset_id".to_owned()))
             }
         })
         .and_then(|_| {
-            if let Some(Type::Uint(64)) = gas.get_type(self.context) {
+            if gas
+                .get_type(self.context)
+                .map_or(false, |t| t.is_uint_of(self.context, 64))
+            {
                 Ok(())
             } else {
                 Err(IrError::VerifyContractCallBadTypes("gas".to_owned()))
@@ -498,40 +533,49 @@ impl<'a> InstructionVerifier<'a> {
     fn verify_extract_element(
         &self,
         array: &Value,
-        ty: &Aggregate,
+        ty: &Type,
         index_val: &Value,
     ) -> Result<(), IrError> {
-        match array.get_stripped_ptr_type(self.context) {
-            Some(Type::Array(ary_ty)) => {
-                if !ary_ty.is_equivalent(self.context, ty) {
+        array.get_stripped_ptr_type(self.context).map_or(
+            Err(IrError::VerifyAccessElementOnNonArray),
+            |array_ty| {
+                if !array_ty.is_array(self.context) {
+                    Err(IrError::VerifyAccessElementOnNonArray)
+                } else if !array_ty
+                    .get_array_elem_type(self.context)
+                    .map_or(false, |elem_ty| elem_ty.eq(self.context, ty))
+                {
                     Err(IrError::VerifyAccessElementInconsistentTypes)
-                } else if !matches!(index_val.get_type(self.context), Some(Type::Uint(_))) {
+                } else if !index_val
+                    .get_type(self.context)
+                    .map_or(false, |t| t.is_uint(self.context))
+                {
                     Err(IrError::VerifyAccessElementNonIntIndex)
                 } else {
                     Ok(())
                 }
-            }
-            _otherwise => Err(IrError::VerifyAccessElementOnNonArray),
-        }
+            },
+        )
     }
 
     fn verify_extract_value(
         &self,
         aggregate: &Value,
-        ty: &Aggregate,
+        ty: &Type,
         indices: &[u64],
     ) -> Result<(), IrError> {
-        match aggregate.get_stripped_ptr_type(self.context) {
-            Some(Type::Struct(agg_ty)) | Some(Type::Union(agg_ty)) => {
-                if !agg_ty.is_equivalent(self.context, ty) {
-                    Err(IrError::VerifyAccessValueInconsistentTypes)
-                } else if ty.get_field_type(self.context, indices).is_none() {
-                    Err(IrError::VerifyAccessValueInvalidIndices)
-                } else {
-                    Ok(())
-                }
-            }
-            _otherwise => Err(IrError::VerifyAccessValueOnNonStruct),
+        let agg_ty = aggregate
+            .get_stripped_ptr_type(self.context)
+            .ok_or(IrError::VerifyAccessValueOnNonStruct)?;
+
+        if !agg_ty.eq(self.context, ty) {
+            Err(IrError::VerifyAccessValueInconsistentTypes)
+        } else if !agg_ty.is_struct(self.context) && !agg_ty.is_union(self.context) {
+            Err(IrError::VerifyAccessValueOnNonStruct)
+        } else if ty.get_indexed_type(self.context, indices).is_none() {
+            Err(IrError::VerifyAccessValueInvalidIndices)
+        } else {
+            Ok(())
         }
     }
 
@@ -551,7 +595,10 @@ impl<'a> InstructionVerifier<'a> {
 
     fn verify_gtf(&self, index: &Value, _tx_field_id: &u64) -> Result<(), IrError> {
         // We should perhaps verify that _tx_field_id fits in a twelve bit immediate
-        if !matches!(index.get_type(self.context), Some(Type::Uint(_))) {
+        if !index
+            .get_type(self.context)
+            .map_or(false, |ty| ty.is_uint(self.context))
+        {
             Err(IrError::VerifyInvalidGtfIndexType)
         } else {
             Ok(())
@@ -561,54 +608,55 @@ impl<'a> InstructionVerifier<'a> {
     fn verify_insert_element(
         &self,
         array: &Value,
-        ty: &Aggregate,
+        ty: &Type,
         value: &Value,
         index_val: &Value,
     ) -> Result<(), IrError> {
-        match array.get_stripped_ptr_type(self.context) {
-            Some(Type::Array(ary_ty)) => {
-                if !ary_ty.is_equivalent(self.context, ty) {
-                    Err(IrError::VerifyAccessElementInconsistentTypes)
-                } else if self.opt_ty_not_eq(
-                    &ty.get_elem_type(self.context),
-                    &value.get_stripped_ptr_type(self.context),
-                ) {
-                    Err(IrError::VerifyInsertElementOfIncorrectType)
-                } else if !matches!(index_val.get_type(self.context), Some(Type::Uint(_))) {
-                    Err(IrError::VerifyAccessElementNonIntIndex)
-                } else {
-                    Ok(())
-                }
+        if let Some(array_ty) = array.get_stripped_ptr_type(self.context) {
+            if !array_ty.is_array(self.context) {
+                Err(IrError::VerifyAccessElementOnNonArray)
+            } else if !array_ty.eq(self.context, ty) {
+                Err(IrError::VerifyAccessElementInconsistentTypes)
+            } else if self.opt_ty_not_eq(
+                &array_ty.get_array_elem_type(self.context),
+                &value.get_type(self.context),
+            ) {
+                Err(IrError::VerifyInsertElementOfIncorrectType)
+            } else if !index_val
+                .get_type(self.context)
+                .map_or(false, |t| t.is_uint(self.context))
+            {
+                Err(IrError::VerifyAccessElementNonIntIndex)
+            } else {
+                Ok(())
             }
-            _otherwise => Err(IrError::VerifyAccessElementOnNonArray),
+        } else {
+            Err(IrError::VerifyAccessElementOnNonArray)
         }
     }
 
     fn verify_insert_value(
         &self,
         aggregate: &Value,
-        ty: &Aggregate,
+        ty: &Type,
         value: &Value,
         idcs: &[u64],
     ) -> Result<(), IrError> {
-        match aggregate.get_stripped_ptr_type(self.context) {
-            Some(Type::Struct(str_ty)) => {
-                if !str_ty.is_equivalent(self.context, ty) {
-                    Err(IrError::VerifyAccessValueInconsistentTypes)
-                } else {
-                    let field_ty = ty.get_field_type(self.context, idcs);
-                    if field_ty.is_none() {
-                        Err(IrError::VerifyAccessValueInvalidIndices)
-                    } else if self
-                        .opt_ty_not_eq(&field_ty, &value.get_stripped_ptr_type(self.context))
-                    {
-                        Err(IrError::VerifyInsertValueOfIncorrectType)
-                    } else {
-                        Ok(())
-                    }
-                }
-            }
-            _otherwise => Err(IrError::VerifyAccessValueOnNonStruct),
+        let agg_ty = aggregate
+            .get_stripped_ptr_type(self.context)
+            .ok_or(IrError::VerifyAccessValueOnNonStruct)?;
+
+        if !agg_ty.eq(self.context, ty) {
+            Err(IrError::VerifyAccessValueInconsistentTypes)
+        } else if !agg_ty.is_struct(self.context) && !agg_ty.is_union(self.context) {
+            Err(IrError::VerifyAccessValueOnNonStruct)
+        } else if self.opt_ty_not_eq(
+            &ty.get_indexed_type(self.context, idcs),
+            &value.get_stripped_ptr_type(self.context),
+        ) {
+            Err(IrError::VerifyAccessValueInvalidIndices)
+        } else {
+            Ok(())
         }
     }
 
@@ -618,12 +666,12 @@ impl<'a> InstructionVerifier<'a> {
         let val_ty = value
             .get_type(self.context)
             .ok_or(IrError::VerifyIntToPtrUnknownSourceType)?;
-        if !matches!(val_ty, Type::Uint(64)) {
+        if !val_ty.is_uint_of(self.context, 64) {
             return Err(IrError::VerifyIntToPtrFromNonIntegerType(
                 val_ty.as_string(self.context),
             ));
         }
-        if ty.is_copy_type() {
+        if !ty.is_ptr_type(self.context) {
             return Err(IrError::VerifyIntToPtrToCopyType(
                 val_ty.as_string(self.context),
             ));
@@ -633,21 +681,22 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_load(&self, src_val: &Value) -> Result<(), IrError> {
-        let src_ptr = src_val.get_pointer(self.context);
-        if src_ptr.is_none() {
-            if !self.is_ptr_argument(src_val) {
-                Err(IrError::VerifyLoadFromNonPointer)
-            } else {
-                Ok(())
-            }
+        if !src_val
+            .get_type(self.context)
+            .map_or(false, |t| t.is_ptr_type(self.context))
+        {
+            Err(IrError::VerifyLoadFromNonPointer)
         } else {
             Ok(())
         }
     }
 
     fn verify_log(&self, log_val: &Value, log_ty: &Type, log_id: &Value) -> Result<(), IrError> {
-        if !matches!(log_id.get_type(self.context), Some(Type::Uint(64))) {
-            return Err(IrError::VerifyLogId);
+        match log_id.get_type(self.context) {
+            Some(ty) if ty.is_uint_of(self.context, 64) => {}
+            _ => {
+                return Err(IrError::VerifyLogId);
+            }
         }
 
         if self.opt_ty_not_eq(&log_val.get_stripped_ptr_type(self.context), &Some(*log_ty)) {
@@ -659,7 +708,7 @@ impl<'a> InstructionVerifier<'a> {
 
     fn verify_mem_copy(
         &self,
-        dst_val: &Value,
+        _dst_val: &Value,
         _src_val: &Value,
         _byte_len: &u64,
     ) -> Result<(), IrError> {
@@ -669,17 +718,17 @@ impl<'a> InstructionVerifier<'a> {
         //| XXX Pointers are broken, pending https://github.com/FuelLabs/sway/issues/2819
         //| So here we may still get non-pointers, but still ref-types, passed as the source for
         //| mem_copy, especially when dealing with constant b256s or similar.
-        if dst_val.get_pointer(self.context).is_none()
+        //|if dst_val.get_pointer(self.context).is_none()
         //|    || !(src_val.get_pointer(self.context).is_some()
         //|        || matches!(
         //|            src_val.get_instruction(self.context),
         //|            Some(Instruction::GetStorageKey) | Some(Instruction::IntToPtr(..))
         //|        ))
-        {
-            Err(IrError::VerifyMemcopyNonExistentPointer)
-        } else {
-            Ok(())
-        }
+        //|{
+        //|    Err(IrError::VerifyMemcopyNonExistentPointer)
+        //|} else {
+        Ok(())
+        //|}
     }
 
     fn verify_ret(&self, val: &Value, ty: &Type) -> Result<(), IrError> {
@@ -689,7 +738,7 @@ impl<'a> InstructionVerifier<'a> {
         //| values.  But we need better support from a data section for constant ref-type values,
         //| which is currently handled in ASMgen, but should be handled here in IR.
         //|
-        //|if !self.cur_func_is_entry() && !ty.is_copy_type() {
+        //|if !self.cur_func_is_entry() && !ty.is_copy_type(self.context) {
         //|    Err(IrError::VerifyReturnRefTypeValue(
         //|        self.cur_function.name.clone(),
         //|        ty.as_string(self.context),
@@ -708,7 +757,10 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_revert(&self, val: &Value) -> Result<(), IrError> {
-        if !matches!(val.get_type(self.context), Some(Type::Uint(64))) {
+        if !val
+            .get_type(self.context)
+            .map_or(false, |t| t.is_uint_of(self.context, 64))
+        {
             Err(IrError::VerifyRevertCodeBadType)
         } else {
             Ok(())
@@ -722,46 +774,42 @@ impl<'a> InstructionVerifier<'a> {
         output_index: &Value,
         coins: &Value,
     ) -> Result<(), IrError> {
+        // Check a value is a `u64`, returns a `Result<(), IrError>`.
+        let is_u64_or = |val: &Value, err| {
+            val.get_type(self.context)
+                .map_or(false, |t| t.is_uint_of(self.context, 64))
+                .then_some(())
+                .ok_or(err)
+        };
+
         // Check that the first operand is a struct with the first field being a `b256`
         // representing the recipient address
-        if let Some(Type::Struct(agg)) = recipient_and_message.get_stripped_ptr_type(self.context) {
-            let fields = self.context.aggregates[agg.0].field_types();
-            if fields.is_empty() || !fields[0].eq(self.context, &Type::B256) {
-                return Err(IrError::VerifySmoRecipientBadType);
-            }
-        } else {
-            return Err(IrError::VerifySmoBadRecipientAndMessageType);
-        }
-
-        // Check that the second operand is a `u64` representing the message size.
-        if !matches!(message_size.get_type(self.context), Some(Type::Uint(64))) {
-            return Err(IrError::VerifySmoMessageSize);
-        }
-
-        // Check that the third operand is a `u64` representing the output index.
-        if !matches!(output_index.get_type(self.context), Some(Type::Uint(64))) {
-            return Err(IrError::VerifySmoOutputIndex);
-        }
-
-        // Check that the fourth operand is a `u64` representing the amount of coins being sent.
-        if !matches!(coins.get_type(self.context), Some(Type::Uint(64))) {
-            return Err(IrError::VerifySmoCoins);
-        }
-
-        Ok(())
+        recipient_and_message
+            .get_stripped_ptr_type(self.context)
+            .map_or(Err(IrError::VerifySmoRecipientBadType), |msg_ty| {
+                if !msg_ty.is_struct(self.context)
+                    || msg_ty
+                        .field_iter(self.context)
+                        .next()
+                        .map_or(false, |fld_ty| !fld_ty.is_b256(self.context))
+                {
+                    Err(IrError::VerifySmoRecipientBadType)
+                } else {
+                    Ok(())
+                }
+            })
+            .and_then(|_| is_u64_or(message_size, IrError::VerifySmoMessageSize))
+            .and_then(|_| is_u64_or(output_index, IrError::VerifySmoOutputIndex))
+            .and_then(|_| is_u64_or(coins, IrError::VerifySmoCoins))
     }
 
-    fn verify_state_load_store(
-        &self,
-        dst_val: &Value,
-        val_type: &Type,
-        key: &Value,
-    ) -> Result<(), IrError> {
-        if !matches!(self.get_pointer_type(dst_val), Some(ty) if ty.eq(self.context, val_type)) {
-            Err(IrError::VerifyStateDestBadType(
-                val_type.as_string(self.context),
-            ))
-        } else if !matches!(self.get_pointer_type(key), Some(Type::B256)) {
+    fn verify_state_load_store(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
+        if !matches!(self.get_pointer_type(dst_val), Some(ty) if ty.is_b256(self.context)) {
+            Err(IrError::VerifyStateDestBadType("b256".to_owned()))
+        } else if !self
+            .get_pointer_type(key)
+            .map_or(false, |t| t.is_b256(self.context))
+        {
             Err(IrError::VerifyStateKeyBadType)
         } else {
             Ok(())
@@ -769,7 +817,10 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_state_load_word(&self, key: &Value) -> Result<(), IrError> {
-        if !matches!(self.get_pointer_type(key), Some(Type::B256)) {
+        if !self
+            .get_pointer_type(key)
+            .map_or(false, |t| t.is_b256(self.context))
+        {
             Err(IrError::VerifyStateKeyBadType)
         } else {
             Ok(())
@@ -777,12 +828,16 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_state_store_word(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
-        if !matches!(self.get_pointer_type(key), Some(Type::B256)) {
+        if !self
+            .get_pointer_type(key)
+            .map_or(false, |t| t.is_b256(self.context))
+        {
             Err(IrError::VerifyStateKeyBadType)
-        } else if !matches!(dst_val.get_type(self.context), Some(Type::Uint(64))) {
-            Err(IrError::VerifyStateDestBadType(
-                Type::Uint(64).as_string(self.context),
-            ))
+        } else if !dst_val
+            .get_type(self.context)
+            .map_or(false, |t| t.is_uint_of(self.context, 64))
+        {
+            Err(IrError::VerifyStateDestBadType("u64".to_owned()))
         } else {
             Ok(())
         }
@@ -807,9 +862,9 @@ impl<'a> InstructionVerifier<'a> {
     // Also, because we inline everything at the moment, this doesn't really matter and is added
     // simply to make the verifier happy.
     //
-    fn is_ptr_argument(&self, ptr_val: &Value) -> bool {
+    fn _is_ptr_argument(&self, ptr_val: &Value) -> bool {
         match &self.context.values[ptr_val.0].value {
-            ValueDatum::Argument(BlockArgument { ty, .. }) => !ty.is_copy_type(),
+            ValueDatum::Argument(BlockArgument { ty, .. }) => !ty.is_copy_type(self.context),
             _otherwise => false,
         }
     }
@@ -820,12 +875,11 @@ impl<'a> InstructionVerifier<'a> {
                 Some(*ptr_ty.get_type(self.context))
             }
             ValueDatum::Instruction(Instruction::IntToPtr(_, ty)) => Some(*ty),
-            ValueDatum::Argument(BlockArgument {
-                ty: Type::Pointer(ptr),
-                ..
-            }) => Some(*ptr.get_type(self.context)),
+            ValueDatum::Argument(BlockArgument { ty, .. }) if ty.is_ptr_type(self.context) => {
+                ty.get_inner_ptr_type(self.context)
+            }
             ValueDatum::Argument(BlockArgument { ty: arg_ty, .. }) => {
-                match arg_ty.is_copy_type() && !arg_ty.is_ptr_type() {
+                match arg_ty.is_copy_type(self.context) && !arg_ty.is_ptr_type(self.context) {
                     true => None,
                     false => Some(*arg_ty),
                 }

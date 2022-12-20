@@ -13,7 +13,6 @@ use crate::{
     context::Context,
     function::{Function, FunctionContent},
     instruction::{FuelVmInstruction, Instruction, Predicate, Register},
-    irtype::Type,
     metadata::{MetadataIndex, Metadatum},
     module::{Kind, ModuleContent},
     value::{Value, ValueContent, ValueDatum},
@@ -310,15 +309,16 @@ fn instruction_to_doc<'a>(
             Instruction::AsmBlock(asm, args) => {
                 asm_block_to_doc(context, md_namer, namer, ins_value, asm, args, metadata)
             }
-            Instruction::AddrOf(value) => maybe_constant_to_doc(context, md_namer, namer, value)
-                .append(
+            Instruction::AddrOf(value, _ty) => {
+                maybe_constant_to_doc(context, md_namer, namer, value).append(
                     Doc::text_line(format!(
                         "{} = addr_of {}",
                         namer.name(context, ins_value),
                         namer.name(context, value),
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
-                ),
+                )
+            }
             Instruction::BitCast(value, ty) => {
                 maybe_constant_to_doc(context, md_namer, namer, value).append(Doc::line(
                     Doc::text(format!(
@@ -390,7 +390,12 @@ fn instruction_to_doc<'a>(
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 )),
-            Instruction::Cmp(pred, lhs_value, rhs_value) => {
+            Instruction::Cmp {
+                pred,
+                lhs_value,
+                rhs_value,
+                ret_ty: _,
+            } => {
                 let pred_str = match pred {
                     Predicate::Equal => "eq",
                 };
@@ -472,28 +477,28 @@ fn instruction_to_doc<'a>(
                 )),
             Instruction::ExtractElement {
                 array,
-                ty,
+                array_ty,
                 index_val,
             } => maybe_constant_to_doc(context, md_namer, namer, index_val).append(Doc::line(
                 Doc::text(format!(
                     "{} = extract_element {}, {}, {}",
                     namer.name(context, ins_value),
                     namer.name(context, array),
-                    Type::Array(*ty).as_string(context),
+                    array_ty.as_string(context),
                     namer.name(context, index_val),
                 ))
                 .append(md_namer.md_idx_to_doc(context, metadata)),
             )),
             Instruction::ExtractValue {
                 aggregate,
-                ty,
+                struct_ty,
                 indices,
             } => maybe_constant_to_doc(context, md_namer, namer, aggregate).append(Doc::line(
                 Doc::text(format!(
                     "{} = extract_value {}, {}, ",
                     namer.name(context, ins_value),
                     namer.name(context, aggregate),
-                    Type::Struct(*ty).as_string(context),
+                    struct_ty.as_string(context),
                 ))
                 .append(Doc::list_sep(
                     indices
@@ -505,28 +510,31 @@ fn instruction_to_doc<'a>(
                 .append(md_namer.md_idx_to_doc(context, metadata)),
             )),
             Instruction::FuelVm(fuel_vm_instr) => match fuel_vm_instr {
-                FuelVmInstruction::GetStorageKey => Doc::line(
+                FuelVmInstruction::GetStorageKey(_ty) => Doc::line(
                     Doc::text(format!(
                         "{} = get_storage_key",
                         namer.name(context, ins_value),
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 ),
-                FuelVmInstruction::Gtf { index, tx_field_id } => {
-                    maybe_constant_to_doc(context, md_namer, namer, index).append(Doc::line(
-                        Doc::text(format!(
-                            "{} = gtf {}, {}",
-                            namer.name(context, ins_value),
-                            namer.name(context, index),
-                            tx_field_id,
-                        ))
-                        .append(md_namer.md_idx_to_doc(context, metadata)),
+                FuelVmInstruction::Gtf {
+                    index,
+                    tx_field_id,
+                    ret_ty: _,
+                } => maybe_constant_to_doc(context, md_namer, namer, index).append(Doc::line(
+                    Doc::text(format!(
+                        "{} = gtf {}, {}",
+                        namer.name(context, ins_value),
+                        namer.name(context, index),
+                        tx_field_id,
                     ))
-                }
+                    .append(md_namer.md_idx_to_doc(context, metadata)),
+                )),
                 FuelVmInstruction::Log {
                     log_val,
                     log_ty,
                     log_id,
+                    ret_ty: _,
                 } => maybe_constant_to_doc(context, md_namer, namer, log_val)
                     .append(maybe_constant_to_doc(context, md_namer, namer, log_id))
                     .append(Doc::line(
@@ -538,7 +546,7 @@ fn instruction_to_doc<'a>(
                         ))
                         .append(md_namer.md_idx_to_doc(context, metadata)),
                     )),
-                FuelVmInstruction::ReadRegister(reg) => Doc::line(
+                FuelVmInstruction::ReadRegister(reg, _ty) => Doc::line(
                     Doc::text(format!(
                         "{} = read_register {}",
                         namer.name(context, ins_value),
@@ -571,6 +579,7 @@ fn instruction_to_doc<'a>(
                     message_size,
                     output_index,
                     coins,
+                    ret_ty: _,
                 } => maybe_constant_to_doc(context, md_namer, namer, recipient_and_message)
                     .append(maybe_constant_to_doc(
                         context,
@@ -595,7 +604,11 @@ fn instruction_to_doc<'a>(
                         ))
                         .append(md_namer.md_idx_to_doc(context, metadata)),
                     )),
-                FuelVmInstruction::StateLoadQuadWord { load_val, key } => Doc::line(
+                FuelVmInstruction::StateLoadQuadWord {
+                    load_val,
+                    key,
+                    ret_ty: _,
+                } => Doc::line(
                     Doc::text(format!(
                         "state_load_quad_word ptr {}, key ptr {}",
                         namer.name(context, load_val),
@@ -603,7 +616,7 @@ fn instruction_to_doc<'a>(
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 ),
-                FuelVmInstruction::StateLoadWord(key) => Doc::line(
+                FuelVmInstruction::StateLoadWord(key, _ty) => Doc::line(
                     Doc::text(format!(
                         "{} = state_load_word key ptr {}",
                         namer.name(context, ins_value),
@@ -611,7 +624,11 @@ fn instruction_to_doc<'a>(
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 ),
-                FuelVmInstruction::StateStoreQuadWord { stored_val, key } => Doc::line(
+                FuelVmInstruction::StateStoreQuadWord {
+                    stored_val,
+                    key,
+                    ret_ty: _,
+                } => Doc::line(
                     Doc::text(format!(
                         "state_store_quad_word ptr {}, key ptr {}",
                         namer.name(context, stored_val),
@@ -619,16 +636,18 @@ fn instruction_to_doc<'a>(
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),
                 ),
-                FuelVmInstruction::StateStoreWord { stored_val, key } => {
-                    maybe_constant_to_doc(context, md_namer, namer, stored_val).append(Doc::line(
-                        Doc::text(format!(
-                            "state_store_word {}, key ptr {}",
-                            namer.name(context, stored_val),
-                            namer.name(context, key),
-                        ))
-                        .append(md_namer.md_idx_to_doc(context, metadata)),
+                FuelVmInstruction::StateStoreWord {
+                    stored_val,
+                    key,
+                    ret_ty: _,
+                } => maybe_constant_to_doc(context, md_namer, namer, stored_val).append(Doc::line(
+                    Doc::text(format!(
+                        "state_store_word {}, key ptr {}",
+                        namer.name(context, stored_val),
+                        namer.name(context, key),
                     ))
-                }
+                    .append(md_namer.md_idx_to_doc(context, metadata)),
+                )),
             },
             Instruction::GetPointer {
                 base_ptr,
@@ -652,7 +671,7 @@ fn instruction_to_doc<'a>(
             }
             Instruction::InsertElement {
                 array,
-                ty,
+                array_ty,
                 value,
                 index_val,
             } => maybe_constant_to_doc(context, md_namer, namer, array)
@@ -663,7 +682,7 @@ fn instruction_to_doc<'a>(
                         "{} = insert_element {}, {}, {}, {}",
                         namer.name(context, ins_value),
                         namer.name(context, array),
-                        Type::Array(*ty).as_string(context),
+                        array_ty.as_string(context),
                         namer.name(context, value),
                         namer.name(context, index_val),
                     ))
@@ -671,7 +690,7 @@ fn instruction_to_doc<'a>(
                 )),
             Instruction::InsertValue {
                 aggregate,
-                ty,
+                struct_ty,
                 value,
                 indices,
             } => maybe_constant_to_doc(context, md_namer, namer, aggregate)
@@ -681,7 +700,7 @@ fn instruction_to_doc<'a>(
                         "{} = insert_value {}, {}, {}, ",
                         namer.name(context, ins_value),
                         namer.name(context, aggregate),
-                        Type::Struct(*ty).as_string(context),
+                        struct_ty.as_string(context),
                         namer.name(context, value),
                     ))
                     .append(Doc::list_sep(
@@ -716,6 +735,7 @@ fn instruction_to_doc<'a>(
                 dst_val,
                 src_val,
                 byte_len,
+                ret_ty: _,
             } => maybe_constant_to_doc(context, md_namer, namer, src_val).append(Doc::line(
                 Doc::text(format!(
                     "mem_copy {}, {}, {}",
@@ -742,6 +762,7 @@ fn instruction_to_doc<'a>(
             Instruction::Store {
                 dst_val,
                 stored_val,
+                ret_ty: _,
             } => maybe_constant_to_doc(context, md_namer, namer, stored_val).append(Doc::line(
                 Doc::text(format!(
                     "store {}, ptr {}",

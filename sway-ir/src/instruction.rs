@@ -15,7 +15,7 @@ use crate::{
     block::Block,
     context::Context,
     function::Function,
-    irtype::{Aggregate, Type},
+    irtype::Type,
     pointer::Pointer,
     pretty::DebugWithContext,
     value::{Value, ValueDatum},
@@ -30,7 +30,7 @@ pub struct BranchToWithArgs {
 #[derive(Debug, Clone, DebugWithContext)]
 pub enum Instruction {
     /// Address of a non-copy (memory) value
-    AddrOf(Value),
+    AddrOf(Value, Type),
     /// An opaque list of ASM instructions passed directly to codegen.
     AsmBlock(AsmBlock, Vec<AsmArg>),
     /// Binary arithmetic operations
@@ -46,7 +46,12 @@ pub enum Instruction {
     /// A function call with a list of arguments.
     Call(Function, Vec<Value>),
     /// Comparison between two values using various comparators and returning a boolean.
-    Cmp(Predicate, Value, Value),
+    Cmp {
+        pred: Predicate,
+        lhs_value: Value,
+        rhs_value: Value,
+        ret_ty: Type,
+    },
     /// A conditional jump with the boolean condition value and true or false destinations.
     ConditionalBranch {
         cond_value: Value,
@@ -65,16 +70,16 @@ pub enum Instruction {
     /// Reading a specific element from an array.
     ExtractElement {
         array: Value,
-        ty: Aggregate,
+        array_ty: Type,
         index_val: Value,
     },
     /// Reading a specific field from (nested) structs.
     ExtractValue {
         aggregate: Value,
-        ty: Aggregate,
+        struct_ty: Type,
         indices: Vec<u64>,
     },
-    /// Umbrella instruction variant for FuelVM-specific instructions
+    /// Umbrella instruction variant for FuelVM-specific instructions.
     FuelVm(FuelVmInstruction),
     /// Return a pointer as a value.
     GetPointer {
@@ -85,14 +90,14 @@ pub enum Instruction {
     /// Writing a specific value to an array.
     InsertElement {
         array: Value,
-        ty: Aggregate,
+        array_ty: Type,
         value: Value,
         index_val: Value,
     },
     /// Writing a specific value to a (nested) struct field.
     InsertValue {
         aggregate: Value,
-        ty: Aggregate,
+        struct_ty: Type,
         value: Value,
         indices: Vec<u64>,
     },
@@ -105,31 +110,38 @@ pub enum Instruction {
         dst_val: Value,
         src_val: Value,
         byte_len: u64,
+        ret_ty: Type,
     },
     /// No-op, handy as a placeholder instruction.
     Nop,
     /// Return from a function.
     Ret(Value, Type),
     /// Write a value to a memory pointer.
-    Store { dst_val: Value, stored_val: Value },
+    Store {
+        dst_val: Value,
+        stored_val: Value,
+        ret_ty: Type,
+    },
 }
 
 #[derive(Debug, Clone, DebugWithContext)]
 pub enum FuelVmInstruction {
     /// Generate a unique integer value
-    GetStorageKey,
+    GetStorageKey(Type),
     Gtf {
         index: Value,
         tx_field_id: u64,
+        ret_ty: Type,
     },
     /// Logs a value along with an identifier.
     Log {
         log_val: Value,
         log_ty: Type,
         log_id: Value,
+        ret_ty: Type,
     },
     /// Reads a special register in the VM.
-    ReadRegister(Register),
+    ReadRegister(Register, Type),
     /// Revert VM execution.
     Revert(Value),
     /// - Sends a message to an output via the `smo` FuelVM instruction. The first operand must be
@@ -142,25 +154,29 @@ pub enum FuelVmInstruction {
         message_size: Value,
         output_index: Value,
         coins: Value,
+        ret_ty: Type,
     },
     /// Read a quad word from a storage slot. Type of `load_val` must be a B256 ptr.
     StateLoadQuadWord {
         load_val: Value,
         key: Value,
+        ret_ty: Type,
     },
     /// Read a single word from a storage slot.
-    StateLoadWord(Value),
+    StateLoadWord(Value, Type),
     /// Write a value to a storage slot.  Key must be a B256, type of `stored_val` must be a
     /// Uint(256) ptr.
     StateStoreQuadWord {
         stored_val: Value,
         key: Value,
+        ret_ty: Type,
     },
     /// Write a value to a storage slot.  Key must be a B256, type of `stored_val` must be a
     /// Uint(64) value.
     StateStoreWord {
         stored_val: Value,
         key: Value,
+        ret_ty: Type,
     },
 }
 
@@ -219,22 +235,22 @@ impl Instruction {
     /// `Ret` do not have a type.
     pub fn get_type(&self, context: &Context) -> Option<Type> {
         match self {
-            Instruction::AddrOf(_) => Some(Type::Uint(64)),
+            // Specialised types.
+            Instruction::AddrOf(_, ret_ty) => Some(*ret_ty),
             Instruction::AsmBlock(asm_block, _) => Some(asm_block.get_type(context)),
             Instruction::BinaryOp { arg1, .. } => arg1.get_type(context),
             Instruction::BitCast(_, ty) => Some(*ty),
             Instruction::Call(function, _) => Some(context.functions[function.0].return_type),
-            Instruction::Cmp(..) => Some(Type::Bool),
+            Instruction::Cmp { ret_ty, .. } => Some(*ret_ty),
             Instruction::ContractCall { return_type, .. } => Some(*return_type),
-            Instruction::ExtractElement { ty, .. } => ty.get_elem_type(context),
-            Instruction::ExtractValue { ty, indices, .. } => ty.get_field_type(context, indices),
-            Instruction::FuelVm(FuelVmInstruction::GetStorageKey) => Some(Type::B256),
-            Instruction::FuelVm(FuelVmInstruction::Gtf { .. }) => Some(Type::Uint(64)),
-            Instruction::FuelVm(FuelVmInstruction::Log { .. }) => Some(Type::Unit),
-            Instruction::FuelVm(FuelVmInstruction::ReadRegister(_)) => Some(Type::Uint(64)),
-            Instruction::FuelVm(FuelVmInstruction::StateLoadWord(_)) => Some(Type::Uint(64)),
+            Instruction::ExtractElement { array_ty, .. } => array_ty.get_array_elem_type(context),
+            Instruction::ExtractValue {
+                struct_ty, indices, ..
+            } => struct_ty.get_indexed_type(context, indices),
+            Instruction::GetPointer { ptr_ty, .. } => Some(*ptr_ty.get_type(context)),
             Instruction::InsertElement { array, .. } => array.get_type(context),
             Instruction::InsertValue { aggregate, .. } => aggregate.get_type(context),
+            Instruction::IntToPtr(_, ty) => Some(*ty),
             Instruction::Load(ptr_val) => match &context.values[ptr_val.0].value {
                 ValueDatum::Argument(arg) => Some(arg.ty.strip_ptr_type(context)),
                 ValueDatum::Constant(cons) => Some(cons.ty.strip_ptr_type(context)),
@@ -243,73 +259,70 @@ impl Instruction {
                 }
             },
 
-            // These can be recursed to via Load, so we return the pointer type.
-            Instruction::GetPointer { ptr_ty, .. } => Some(Type::Pointer(*ptr_ty)),
-
-            // Used to re-interpret an integer as a pointer to some type so return the pointer type.
-            Instruction::IntToPtr(_, ty) => Some(*ty),
+            // Statements which have a Unit type.
+            Instruction::MemCopy { ret_ty, .. } | Instruction::Store { ret_ty, .. } => {
+                Some(*ret_ty)
+            }
 
             // These are all terminators which don't return, essentially.  No type.
-            Instruction::Branch(_) => None,
-            Instruction::ConditionalBranch { .. } => None,
-            Instruction::FuelVm(FuelVmInstruction::Revert(..)) => None,
-            Instruction::Ret(..) => None,
-
-            Instruction::FuelVm(FuelVmInstruction::Smo { .. }) => Some(Type::Unit),
-            Instruction::FuelVm(FuelVmInstruction::StateLoadQuadWord { .. }) => Some(Type::Unit),
-            Instruction::FuelVm(FuelVmInstruction::StateStoreQuadWord { .. }) => Some(Type::Unit),
-            Instruction::FuelVm(FuelVmInstruction::StateStoreWord { .. }) => Some(Type::Unit),
-            Instruction::MemCopy { .. } => Some(Type::Unit),
-            Instruction::Store { .. } => Some(Type::Unit),
+            Instruction::Branch(_)
+            | Instruction::ConditionalBranch { .. }
+            | Instruction::Ret(..) => None,
 
             // No-op is also no-type.
             Instruction::Nop => None,
+
+            // Special Fuel VM instructions.
+            Instruction::FuelVm(fuel_instr) => match fuel_instr {
+                FuelVmInstruction::GetStorageKey(ret_ty)
+                | FuelVmInstruction::Gtf { ret_ty, .. }
+                | FuelVmInstruction::ReadRegister(_, ret_ty)
+                | FuelVmInstruction::StateLoadWord(_, ret_ty)
+                | FuelVmInstruction::Log { ret_ty, .. }
+                | FuelVmInstruction::Smo { ret_ty, .. }
+                | FuelVmInstruction::StateLoadQuadWord { ret_ty, .. }
+                | FuelVmInstruction::StateStoreQuadWord { ret_ty, .. }
+                | FuelVmInstruction::StateStoreWord { ret_ty, .. } => Some(*ret_ty),
+
+                // Terminator.
+                FuelVmInstruction::Revert(..) => None,
+            },
         }
     }
 
     /// Some [`Instruction`]s may have struct arguments.  Return it if so for this instruction.
-    pub fn get_aggregate(&self, context: &Context) -> Option<Aggregate> {
-        match self {
-            Instruction::Call(func, _args) => match &context.functions[func.0].return_type {
-                Type::Array(aggregate) => Some(*aggregate),
-                Type::Struct(aggregate) => Some(*aggregate),
-                _otherwise => None,
-            },
-            Instruction::GetPointer { ptr_ty, .. } => match ptr_ty.get_type(context) {
-                Type::Array(aggregate) => Some(*aggregate),
-                Type::Struct(aggregate) => Some(*aggregate),
-                _otherwise => None,
-            },
-            Instruction::ExtractElement { ty, .. } => {
-                ty.get_elem_type(context).and_then(|ty| match ty {
-                    Type::Array(nested_aggregate) => Some(nested_aggregate),
-                    Type::Struct(nested_aggregate) => Some(nested_aggregate),
-                    _otherwise => None,
-                })
-            }
-            Instruction::ExtractValue { ty, indices, .. } => {
-                // This array is a field in a struct or element in an array.
-                ty.get_field_type(context, indices).and_then(|ty| match ty {
-                    Type::Array(nested_aggregate) => Some(nested_aggregate),
-                    Type::Struct(nested_aggregate) => Some(nested_aggregate),
-                    _otherwise => None,
-                })
-            }
-
+    pub fn get_aggregate(&self, context: &Context) -> Option<Type> {
+        let ty = match self {
+            Instruction::Call(func, _args) => Some(&context.functions[func.0].return_type),
+            Instruction::GetPointer { ptr_ty, .. } => Some(ptr_ty.get_type(context)),
             // Unknown aggregate instruction.  Adding these as we come across them...
             _otherwise => None,
+        };
+        if let Some(ty) = ty {
+            // TODO: Rewrite using if-let chain.
+            if ty.is_array(context) && ty.is_struct(context) {
+                Some(*ty)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 
     pub fn get_operands(&self) -> Vec<Value> {
         match self {
-            Instruction::AddrOf(v) => vec![*v],
+            Instruction::AddrOf(v, _) => vec![*v],
             Instruction::AsmBlock(_, args) => args.iter().filter_map(|aa| aa.initializer).collect(),
             Instruction::BitCast(v, _) => vec![*v],
             Instruction::BinaryOp { op: _, arg1, arg2 } => vec![*arg1, *arg2],
             Instruction::Branch(BranchToWithArgs { args, .. }) => args.clone(),
             Instruction::Call(_, vs) => vs.clone(),
-            Instruction::Cmp(_, lhs, rhs) => vec![*lhs, *rhs],
+            Instruction::Cmp {
+                lhs_value: lhs,
+                rhs_value: rhs,
+                ..
+            } => vec![*lhs, *rhs],
             Instruction::ConditionalBranch {
                 cond_value,
                 true_block,
@@ -321,9 +334,7 @@ impl Instruction {
                 v
             }
             Instruction::MemCopy {
-                dst_val,
-                src_val,
-                byte_len: _,
+                dst_val, src_val, ..
             } => {
                 vec![*dst_val, *src_val]
             }
@@ -337,38 +348,14 @@ impl Instruction {
             } => vec![*params, *coins, *asset_id, *gas],
             Instruction::ExtractElement {
                 array,
-                ty: _,
+                array_ty: _,
                 index_val,
             } => vec![*array, *index_val],
             Instruction::ExtractValue {
                 aggregate,
-                ty: _,
+                struct_ty: _,
                 indices: _,
             } => vec![*aggregate],
-            Instruction::FuelVm(fuel_vm_instr) => match fuel_vm_instr {
-                FuelVmInstruction::GetStorageKey => vec![],
-                FuelVmInstruction::Gtf {
-                    index,
-                    tx_field_id: _,
-                } => vec![*index],
-                FuelVmInstruction::Log {
-                    log_val, log_id, ..
-                } => vec![*log_val, *log_id],
-                FuelVmInstruction::ReadRegister(_) => vec![],
-                FuelVmInstruction::Revert(v) => vec![*v],
-                FuelVmInstruction::Smo {
-                    recipient_and_message,
-                    message_size,
-                    output_index,
-                    coins,
-                } => vec![*recipient_and_message, *message_size, *output_index, *coins],
-                FuelVmInstruction::StateLoadQuadWord { load_val, key } => vec![*load_val, *key],
-                FuelVmInstruction::StateLoadWord(key) => vec![*key],
-                FuelVmInstruction::StateStoreQuadWord { stored_val, key } => {
-                    vec![*stored_val, *key]
-                }
-                FuelVmInstruction::StateStoreWord { stored_val, key } => vec![*stored_val, *key],
-            },
             Instruction::GetPointer {
                 base_ptr: _,
                 ptr_ty: _,
@@ -380,13 +367,13 @@ impl Instruction {
             }
             Instruction::InsertElement {
                 array,
-                ty: _,
+                array_ty: _,
                 value,
                 index_val,
             } => vec![*array, *value, *index_val],
             Instruction::InsertValue {
                 aggregate,
-                ty: _,
+                struct_ty: _,
                 value,
                 indices: _,
             } => vec![*aggregate, *value],
@@ -397,9 +384,37 @@ impl Instruction {
             Instruction::Store {
                 dst_val,
                 stored_val,
+                ret_ty: _,
             } => {
                 vec![*dst_val, *stored_val]
             }
+
+            Instruction::FuelVm(fuel_vm_instr) => match fuel_vm_instr {
+                FuelVmInstruction::GetStorageKey(_) => vec![],
+                FuelVmInstruction::Gtf { index, .. } => vec![*index],
+                FuelVmInstruction::Log {
+                    log_val, log_id, ..
+                } => vec![*log_val, *log_id],
+                FuelVmInstruction::ReadRegister(..) => vec![],
+                FuelVmInstruction::Revert(v) => vec![*v],
+                FuelVmInstruction::Smo {
+                    recipient_and_message,
+                    message_size,
+                    output_index,
+                    coins,
+                    ..
+                } => vec![*recipient_and_message, *message_size, *output_index, *coins],
+                FuelVmInstruction::StateLoadQuadWord { load_val, key, .. } => vec![*load_val, *key],
+                FuelVmInstruction::StateLoadWord(key, _) => vec![*key],
+                FuelVmInstruction::StateStoreQuadWord {
+                    stored_val, key, ..
+                } => {
+                    vec![*stored_val, *key]
+                }
+                FuelVmInstruction::StateStoreWord {
+                    stored_val, key, ..
+                } => vec![*stored_val, *key],
+            },
         }
     }
 
@@ -411,7 +426,7 @@ impl Instruction {
             }
         };
         match self {
-            Instruction::AddrOf(arg) => replace(arg),
+            Instruction::AddrOf(arg, _) => replace(arg),
             Instruction::AsmBlock(_, args) => args.iter_mut().for_each(|asm_arg| {
                 asm_arg
                     .initializer
@@ -427,9 +442,14 @@ impl Instruction {
                 block.args.iter_mut().for_each(replace);
             }
             Instruction::Call(_, args) => args.iter_mut().for_each(replace),
-            Instruction::Cmp(_, lhs_val, rhs_val) => {
-                replace(lhs_val);
-                replace(rhs_val);
+            Instruction::Cmp {
+                pred: _,
+                lhs_value: lhs,
+                rhs_value: rhs,
+                ret_ty: _,
+            } => {
+                replace(lhs);
+                replace(rhs);
             }
             Instruction::ConditionalBranch {
                 cond_value,
@@ -476,8 +496,22 @@ impl Instruction {
                 replace(index_val);
             }
             Instruction::ExtractValue { aggregate, .. } => replace(aggregate),
+            Instruction::IntToPtr(value, _) => replace(value),
+            Instruction::Load(_) => (),
+            Instruction::MemCopy {
+                dst_val, src_val, ..
+            } => {
+                replace(dst_val);
+                replace(src_val);
+            }
+            Instruction::Nop => (),
+            Instruction::Ret(ret_val, _) => replace(ret_val),
+            Instruction::Store { stored_val, .. } => {
+                replace(stored_val);
+            }
+
             Instruction::FuelVm(fuel_vm_instr) => match fuel_vm_instr {
-                FuelVmInstruction::GetStorageKey => (),
+                FuelVmInstruction::GetStorageKey(_) => (),
                 FuelVmInstruction::Gtf { index, .. } => replace(index),
                 FuelVmInstruction::Log {
                     log_val, log_id, ..
@@ -492,78 +526,81 @@ impl Instruction {
                     message_size,
                     output_index,
                     coins,
+                    ret_ty: _,
                 } => {
                     replace(recipient_and_message);
                     replace(message_size);
                     replace(output_index);
                     replace(coins);
                 }
-                FuelVmInstruction::StateLoadQuadWord { load_val, key } => {
+                FuelVmInstruction::StateLoadQuadWord {
+                    load_val,
+                    key,
+                    ret_ty: _,
+                } => {
                     replace(load_val);
                     replace(key);
                 }
-                FuelVmInstruction::StateLoadWord(key) => {
+                FuelVmInstruction::StateLoadWord(key, _) => {
                     replace(key);
                 }
-                FuelVmInstruction::StateStoreQuadWord { stored_val, key } => {
+                FuelVmInstruction::StateStoreQuadWord {
+                    stored_val,
+                    key,
+                    ret_ty: _,
+                } => {
                     replace(key);
                     replace(stored_val);
                 }
-                FuelVmInstruction::StateStoreWord { stored_val, key } => {
+                FuelVmInstruction::StateStoreWord {
+                    stored_val,
+                    key,
+                    ret_ty: _,
+                } => {
                     replace(key);
                     replace(stored_val);
                 }
             },
-            Instruction::IntToPtr(value, _) => replace(value),
-            Instruction::Load(_) => (),
-            Instruction::MemCopy {
-                dst_val, src_val, ..
-            } => {
-                replace(dst_val);
-                replace(src_val);
-            }
-            Instruction::Nop => (),
-            Instruction::Ret(ret_val, _) => replace(ret_val),
-            Instruction::Store { stored_val, .. } => {
-                replace(stored_val);
-            }
         }
     }
 
     pub fn may_have_side_effect(&self) -> bool {
         match self {
             Instruction::AsmBlock(_, _)
-                | Instruction::Call(..)
-                | Instruction::ContractCall { .. }
-                | Instruction::FuelVm(FuelVmInstruction::Log { .. })
-                | Instruction::FuelVm(FuelVmInstruction::Smo { .. })
-                | Instruction::FuelVm(FuelVmInstruction::StateLoadQuadWord { .. })
-                | Instruction::FuelVm(FuelVmInstruction::StateStoreQuadWord { .. })
-                | Instruction::FuelVm(FuelVmInstruction::StateStoreWord { .. })
-                | Instruction::MemCopy { .. }
-                | Instruction::Store { .. }
-                // Insert(Element/Value), unlike those in LLVM
-                // do not have SSA semantics. They are like stores.
-                | Instruction::InsertElement { .. }
-                | Instruction::InsertValue { .. } => true,
-                | Instruction::AddrOf(_)
-                | Instruction::BitCast(..)
-                | Instruction::BinaryOp { .. }
-                | Instruction::Cmp(..)
-                | Instruction::ExtractElement {  .. }
-                | Instruction::ExtractValue { .. }
-                | Instruction::FuelVm(FuelVmInstruction::GetStorageKey)
-                | Instruction::FuelVm(FuelVmInstruction::Gtf { .. })
-                | Instruction::FuelVm(FuelVmInstruction::ReadRegister(_))
-                | Instruction::FuelVm(FuelVmInstruction::Revert(..))
-                | Instruction::FuelVm(FuelVmInstruction::StateLoadWord(_))
-                | Instruction::Load(_)
-                | Instruction::GetPointer { .. }
-                | Instruction::IntToPtr(..)
-                | Instruction::Branch(_)
-                | Instruction::ConditionalBranch { .. }
-                | Instruction::Ret(..)
-                | Instruction::Nop => false,
+            | Instruction::Call(..)
+            | Instruction::ContractCall { .. }
+            | Instruction::MemCopy { .. }
+            | Instruction::Store { .. }
+            | Instruction::InsertElement { .. }
+            | Instruction::InsertValue { .. } => true,
+
+            Instruction::AddrOf(..)
+            | Instruction::BitCast(..)
+            | Instruction::BinaryOp { .. }
+            | Instruction::Cmp { .. }
+            | Instruction::ExtractElement { .. }
+            | Instruction::ExtractValue { .. }
+            | Instruction::Load(_)
+            | Instruction::GetPointer { .. }
+            | Instruction::IntToPtr(..)
+            | Instruction::Branch(_)
+            | Instruction::ConditionalBranch { .. }
+            | Instruction::Ret(..)
+            | Instruction::Nop => false,
+
+            Instruction::FuelVm(fuel_instr) => match fuel_instr {
+                FuelVmInstruction::Log { .. }
+                | FuelVmInstruction::Smo { .. }
+                | FuelVmInstruction::StateLoadQuadWord { .. }
+                | FuelVmInstruction::StateStoreQuadWord { .. }
+                | FuelVmInstruction::StateStoreWord { .. } => true,
+
+                FuelVmInstruction::GetStorageKey(_)
+                | FuelVmInstruction::Gtf { .. }
+                | FuelVmInstruction::ReadRegister(..)
+                | FuelVmInstruction::Revert(..)
+                | FuelVmInstruction::StateLoadWord(..) => false,
+            },
         }
     }
 
@@ -676,7 +713,8 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn addr_of(self, value: Value) -> Value {
-        make_instruction!(self, Instruction::AddrOf(value))
+        let u64_ty = Type::new_uint(self.context, 64);
+        make_instruction!(self, Instruction::AddrOf(value, u64_ty))
     }
 
     pub fn bitcast(self, value: Value, ty: Type) -> Value {
@@ -709,7 +747,16 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn cmp(self, pred: Predicate, lhs_value: Value, rhs_value: Value) -> Value {
-        make_instruction!(self, Instruction::Cmp(pred, lhs_value, rhs_value))
+        let ret_ty = Type::new_bool(self.context);
+        make_instruction!(
+            self,
+            Instruction::Cmp {
+                pred,
+                lhs_value,
+                rhs_value,
+                ret_ty,
+            }
+        )
     }
 
     pub fn conditional_branch(
@@ -762,36 +809,45 @@ impl<'a> InstructionInserter<'a> {
         )
     }
 
-    pub fn extract_element(self, array: Value, ty: Aggregate, index_val: Value) -> Value {
+    pub fn extract_element(self, array: Value, array_ty: Type, index_val: Value) -> Value {
         make_instruction!(
             self,
             Instruction::ExtractElement {
                 array,
-                ty,
+                array_ty,
                 index_val,
             }
         )
     }
 
-    pub fn extract_value(self, aggregate: Value, ty: Aggregate, indices: Vec<u64>) -> Value {
+    pub fn extract_value(self, aggregate: Value, struct_ty: Type, indices: Vec<u64>) -> Value {
         make_instruction!(
             self,
             Instruction::ExtractValue {
                 aggregate,
-                ty,
+                struct_ty,
                 indices,
             }
         )
     }
 
     pub fn get_storage_key(self) -> Value {
-        make_instruction!(self, Instruction::FuelVm(FuelVmInstruction::GetStorageKey))
+        let b256_ty = Type::new_b256(self.context);
+        make_instruction!(
+            self,
+            Instruction::FuelVm(FuelVmInstruction::GetStorageKey(b256_ty))
+        )
     }
 
     pub fn gtf(self, index: Value, tx_field_id: u64) -> Value {
+        let ret_ty = Type::new_uint(self.context, 64);
         make_instruction!(
             self,
-            Instruction::FuelVm(FuelVmInstruction::Gtf { index, tx_field_id })
+            Instruction::FuelVm(FuelVmInstruction::Gtf {
+                index,
+                tx_field_id,
+                ret_ty,
+            })
         )
     }
 
@@ -810,7 +866,7 @@ impl<'a> InstructionInserter<'a> {
     pub fn insert_element(
         self,
         array: Value,
-        ty: Aggregate,
+        array_ty: Type,
         value: Value,
         index_val: Value,
     ) -> Value {
@@ -818,7 +874,7 @@ impl<'a> InstructionInserter<'a> {
             self,
             Instruction::InsertElement {
                 array,
-                ty,
+                array_ty,
                 value,
                 index_val,
             }
@@ -828,7 +884,7 @@ impl<'a> InstructionInserter<'a> {
     pub fn insert_value(
         self,
         aggregate: Value,
-        ty: Aggregate,
+        struct_ty: Type,
         value: Value,
         indices: Vec<u64>,
     ) -> Value {
@@ -836,7 +892,7 @@ impl<'a> InstructionInserter<'a> {
             self,
             Instruction::InsertValue {
                 aggregate,
-                ty,
+                struct_ty,
                 value,
                 indices,
             }
@@ -848,23 +904,27 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn log(self, log_val: Value, log_ty: Type, log_id: Value) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
             Instruction::FuelVm(FuelVmInstruction::Log {
                 log_val,
                 log_ty,
-                log_id
+                log_id,
+                ret_ty,
             })
         )
     }
 
     pub fn mem_copy(self, dst_val: Value, src_val: Value, byte_len: u64) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
             Instruction::MemCopy {
                 dst_val,
                 src_val,
-                byte_len
+                byte_len,
+                ret_ty,
             }
         )
     }
@@ -874,9 +934,10 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn read_register(self, reg: Register) -> Value {
+        let u64_ty = Type::new_uint(self.context, 64);
         make_instruction!(
             self,
-            Instruction::FuelVm(FuelVmInstruction::ReadRegister(reg))
+            Instruction::FuelVm(FuelVmInstruction::ReadRegister(reg, u64_ty))
         )
     }
 
@@ -902,6 +963,7 @@ impl<'a> InstructionInserter<'a> {
         output_index: Value,
         coins: Value,
     ) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
             Instruction::FuelVm(FuelVmInstruction::Smo {
@@ -909,44 +971,63 @@ impl<'a> InstructionInserter<'a> {
                 message_size,
                 output_index,
                 coins,
+                ret_ty,
             })
         )
     }
 
     pub fn state_load_quad_word(self, load_val: Value, key: Value) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
-            Instruction::FuelVm(FuelVmInstruction::StateLoadQuadWord { load_val, key })
+            Instruction::FuelVm(FuelVmInstruction::StateLoadQuadWord {
+                load_val,
+                key,
+                ret_ty
+            })
         )
     }
 
     pub fn state_load_word(self, key: Value) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
-            Instruction::FuelVm(FuelVmInstruction::StateLoadWord(key))
+            Instruction::FuelVm(FuelVmInstruction::StateLoadWord(key, ret_ty))
         )
     }
 
     pub fn state_store_quad_word(self, stored_val: Value, key: Value) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
-            Instruction::FuelVm(FuelVmInstruction::StateStoreQuadWord { stored_val, key })
+            Instruction::FuelVm(FuelVmInstruction::StateStoreQuadWord {
+                stored_val,
+                key,
+                ret_ty,
+            })
         )
     }
 
     pub fn state_store_word(self, stored_val: Value, key: Value) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
-            Instruction::FuelVm(FuelVmInstruction::StateStoreWord { stored_val, key })
+            Instruction::FuelVm(FuelVmInstruction::StateStoreWord {
+                stored_val,
+                key,
+                ret_ty,
+            })
         )
     }
 
     pub fn store(self, dst_val: Value, stored_val: Value) -> Value {
+        let ret_ty = Type::new_unit(self.context);
         make_instruction!(
             self,
             Instruction::Store {
                 dst_val,
                 stored_val,
+                ret_ty,
             }
         )
     }

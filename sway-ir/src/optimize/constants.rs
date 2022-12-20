@@ -94,11 +94,14 @@ fn combine_cmp(context: &mut Context, function: &Function) -> bool {
         .instruction_iter(context)
         .find_map(
             |(block, inst_val)| match &context.values[inst_val.0].value {
-                ValueDatum::Instruction(Instruction::Cmp(pred, val1, val2))
-                    if val1.is_constant(context) && val2.is_constant(context) =>
-                {
-                    let val1 = val1.get_constant(context).unwrap();
-                    let val2 = val2.get_constant(context).unwrap();
+                ValueDatum::Instruction(Instruction::Cmp {
+                    pred,
+                    lhs_value: lhs,
+                    rhs_value: rhs,
+                    ret_ty: _,
+                }) if lhs.is_constant(context) && rhs.is_constant(context) => {
+                    let val1 = lhs.get_constant(context).unwrap();
+                    let val2 = rhs.get_constant(context).unwrap();
                     match pred {
                         Predicate::Equal => {
                             if val1.eq(context, val2) {
@@ -115,10 +118,8 @@ fn combine_cmp(context: &mut Context, function: &Function) -> bool {
 
     candidate.map_or(false, |(inst_val, block, cn_replace)| {
         // Replace this `cmp` instruction with a constant.
-        inst_val.replace(
-            context,
-            ValueDatum::Constant(Constant::new_bool(cn_replace)),
-        );
+        let new_const = Constant::new_bool(context, cn_replace);
+        inst_val.replace(context, ValueDatum::Constant(new_const));
         block.remove_instruction(context, inst_val);
         true
     })
@@ -139,7 +140,7 @@ fn combine_const_insert_values(context: &mut Context, function: &Function) -> bo
                 // aggregate directly and then to iterate.
                 ValueDatum::Instruction(Instruction::InsertValue {
                     aggregate,
-                    ty: _,
+                    struct_ty: _,
                     value,
                     indices,
                 }) if value.is_constant(context)

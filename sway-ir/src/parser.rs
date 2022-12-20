@@ -471,7 +471,7 @@ mod ir_builder {
                 / array_ty()
                 / struct_ty()
                 / union_ty()
-                / mp:mut_ptr() ty:ast_ty() { IrAstTy::Pointer(Box::new(ty), mp) }
+                / mp:mut_ptr() ty:ast_ty() { IrAstTy::Pointer(Box::new(ty)) }
 
             rule array_ty() -> IrAstTy
                 = "[" _ ty:ast_ty() ";" _ c:decimal() "]" _ {
@@ -600,7 +600,7 @@ mod ir_builder {
         error::IrError,
         function::Function,
         instruction::{Instruction, Predicate, Register},
-        irtype::{Aggregate, Type},
+        irtype::Type,
         metadata::{MetadataIndex, Metadatum},
         module::{Kind, Module},
         pointer::Pointer,
@@ -778,36 +778,36 @@ mod ir_builder {
         Array(Box<IrAstTy>, u64),
         Union(Vec<IrAstTy>),
         Struct(Vec<IrAstTy>),
-        Pointer(Box<IrAstTy>, bool),
+        Pointer(Box<IrAstTy>),
     }
 
     impl IrAstTy {
         fn to_ir_type(&self, context: &mut Context) -> Type {
             match self {
-                IrAstTy::Unit => Type::Unit,
-                IrAstTy::Bool => Type::Bool,
-                IrAstTy::U64 => Type::Uint(64),
-                IrAstTy::B256 => Type::B256,
-                IrAstTy::String(n) => Type::String(*n),
-                IrAstTy::Array(..) => Type::Array(self.to_ir_aggregate_type(context)),
-                IrAstTy::Union(_) => Type::Union(self.to_ir_aggregate_type(context)),
-                IrAstTy::Struct(_) => Type::Struct(self.to_ir_aggregate_type(context)),
-                IrAstTy::Pointer(ty, is_mut) => {
+                IrAstTy::Unit => Type::new_unit(context),
+                IrAstTy::Bool => Type::new_bool(context),
+                IrAstTy::U64 => Type::new_uint(context, 64),
+                IrAstTy::B256 => Type::new_b256(context),
+                IrAstTy::String(n) => Type::new_string(context, *n),
+                IrAstTy::Array(..) => self.to_ir_aggregate_type(context),
+                IrAstTy::Union(_) => self.to_ir_aggregate_type(context),
+                IrAstTy::Struct(_) => self.to_ir_aggregate_type(context),
+                IrAstTy::Pointer(ty) => {
                     let ty = ty.to_ir_type(context);
-                    Type::Pointer(Pointer::new(context, ty, *is_mut, None))
+                    Type::new_pointer(context, ty)
                 }
             }
         }
 
-        fn to_ir_aggregate_type(&self, context: &mut Context) -> Aggregate {
+        fn to_ir_aggregate_type(&self, context: &mut Context) -> Type {
             match self {
                 IrAstTy::Array(el_ty, count) => {
                     let el_ty = el_ty.to_ir_type(context);
-                    Aggregate::new_array(context, el_ty, *count)
+                    Type::new_array(context, el_ty, *count)
                 }
                 IrAstTy::Struct(tys) | IrAstTy::Union(tys) => {
                     let tys = tys.iter().map(|ty| ty.to_ir_type(context)).collect();
-                    Aggregate::new_struct(context, tys)
+                    Type::new_struct(context, tys)
                 }
                 _otherwise => {
                     unreachable!("Converting non aggregate IR AST type to IR aggregate type.")
