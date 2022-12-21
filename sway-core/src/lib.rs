@@ -545,7 +545,7 @@ pub fn inline_function_calls(
         if func.args_iter(ctx).any(|(_name, arg_val)| {
             arg_val
                 .get_type(ctx)
-                .map(|ty| !ty.is_copy_type())
+                .map(|ty| !ty.is_copy_type(ctx))
                 .unwrap_or(false)
         }) {
             return true;

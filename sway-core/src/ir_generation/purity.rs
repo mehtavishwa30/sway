@@ -44,7 +44,7 @@ pub(crate) fn check_function_purity(
                 .map(|instruction| {
                     match instruction {
                         Instruction::FuelVm(FuelVmInstruction::StateLoadQuadWord { .. })
-                        | Instruction::FuelVm(FuelVmInstruction::StateLoadWord(_)) => {
+                        | Instruction::FuelVm(FuelVmInstruction::StateLoadWord(..)) => {
                             (true, writes)
                         }
 
