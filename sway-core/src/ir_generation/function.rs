@@ -450,11 +450,10 @@ impl<'te> FnCompiler<'te> {
                 })?;
 
             // Convert the key pointer to a value using get_ptr
-            let key_ptr_ty = *key_ptr.get_type(context);
             let key_ptr_val = compiler
                 .current_block
                 .ins(context)
-                .get_ptr(key_ptr, key_ptr_ty, 0)
+                .get_ptr(key_ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
 
             // Store the value to the key pointer value
@@ -788,11 +787,10 @@ impl<'te> FnCompiler<'te> {
                     })?;
 
                 // Step 4: Convert the local pointer into a value via `get_ptr`
-                let recipient_and_message_ptr_ty = *recipient_and_message_ptr.get_type(context);
                 let mut recipient_and_message = self
                     .current_block
                     .ins(context)
-                    .get_ptr(recipient_and_message_ptr, recipient_and_message_ptr_ty, 0)
+                    .get_ptr(recipient_and_message_ptr, None, 0)
                     .add_metadatum(context, span_md_idx);
 
                 // Step 5: compile the `recipient` and insert it as the first field of the struct
@@ -1030,14 +1028,14 @@ impl<'te> FnCompiler<'te> {
                     let arg0_ptr =
                         self.current_block
                             .ins(context)
-                            .get_ptr(by_reference_arg, arg0_type, 0);
+                            .get_ptr(by_reference_arg, None, 0);
                     self.current_block.ins(context).store(arg0_ptr, arg0);
 
                     // NOTE: Here we're fetching the original stack pointer, cast to u64.
                     // TODO: Instead of casting here, we should use an `ptrtoint` instruction.
                     self.current_block
                         .ins(context)
-                        .get_ptr(by_reference_arg, u64_ty, 0)
+                        .get_ptr(by_reference_arg, Some(u64_ty), 0)
                         .add_metadatum(context, span_md_idx)
                 }
             }
@@ -1070,7 +1068,7 @@ impl<'te> FnCompiler<'te> {
                 compiled_args.into_iter().enumerate().fold(
                     self.current_block
                         .ins(context)
-                        .get_ptr(user_args_struct_ptr, user_args_struct_type, 0)
+                        .get_ptr(user_args_struct_ptr, None, 0)
                         .add_metadatum(context, span_md_idx),
                     |user_args_struct_ptr_val, (insert_idx, insert_val)| {
                         self.current_block
@@ -1088,7 +1086,7 @@ impl<'te> FnCompiler<'te> {
                 // NOTE: Here we're fetching the original stack pointer, cast to u64.
                 self.current_block
                     .ins(context)
-                    .get_ptr(user_args_struct_ptr, u64_ty, 0)
+                    .get_ptr(user_args_struct_ptr, Some(u64_ty), 0)
                     .add_metadatum(context, span_md_idx)
             }
         };
@@ -1107,11 +1105,10 @@ impl<'te> FnCompiler<'te> {
                 None,
             )
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let ra_struct_ptr_ty = *ra_struct_ptr.get_type(context);
         let mut ra_struct_val = self
             .current_block
             .ins(context)
-            .get_ptr(ra_struct_ptr, ra_struct_ptr_ty, 0)
+            .get_ptr(ra_struct_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
 
         // Insert the contract address
@@ -1291,11 +1288,7 @@ impl<'te> FnCompiler<'te> {
                     .new_unique_local_ptr(context, local_name, ptr_type, true, None);
 
                 // Pass it as the final arg.
-                args.push(
-                    self.current_block
-                        .ins(context)
-                        .get_ptr(local_ptr, ptr_type, 0),
-                );
+                args.push(self.current_block.ins(context).get_ptr(local_ptr, None, 0));
             }
         }
 
@@ -1543,11 +1536,10 @@ impl<'te> FnCompiler<'te> {
         // We need to check the symbol map first, in case locals are shadowing the args, other
         // locals or even constants.
         if let Some(ptr) = self.get_function_ptr(context, name) {
-            let ptr_ty = *ptr.get_type(context);
             let ptr_val = self
                 .current_block
                 .ins(context)
-                .get_ptr(ptr, ptr_ty, 0)
+                .get_ptr(ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
             let fn_param = self.current_fn_param.as_ref();
             let is_ref_primitive = fn_param.is_some()
@@ -1646,7 +1638,7 @@ impl<'te> FnCompiler<'te> {
             let ptr_val = self
                 .current_block
                 .ins(context)
-                .get_ptr(ptr, ptr_ty, 0)
+                .get_ptr(ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
             self.current_block
                 .ins(context)
@@ -1696,7 +1688,7 @@ impl<'te> FnCompiler<'te> {
             let ptr_val = self
                 .current_block
                 .ins(context)
-                .get_ptr(ptr, ptr_ty, 0)
+                .get_ptr(ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
             self.current_block
                 .ins(context)
@@ -1720,13 +1712,11 @@ impl<'te> FnCompiler<'te> {
 
         // First look for a local ptr with the required name
         let mut val = match self.function.get_local_ptr(context, name) {
-            Some(ptr) => {
-                let ptr_ty = *ptr.get_type(context);
-                self.current_block
-                    .ins(context)
-                    .get_ptr(ptr, ptr_ty, 0)
-                    .add_metadatum(context, span_md_idx)
-            }
+            Some(ptr) => self
+                .current_block
+                .ins(context)
+                .get_ptr(ptr, None, 0)
+                .add_metadatum(context, span_md_idx),
             None => {
                 // Now look for an argument with the required name
                 self.function
@@ -1895,11 +1885,10 @@ impl<'te> FnCompiler<'te> {
             .function
             .new_local_ptr(context, temp_name, aggregate, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let array_ptr_ty = *array_ptr.get_type(context);
         let mut array_value = self
             .current_block
             .ins(context)
-            .get_ptr(array_ptr, array_ptr_ty, 0)
+            .get_ptr(array_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
 
         for (idx, elem_expr) in contents.iter().enumerate() {
@@ -2040,11 +2029,10 @@ impl<'te> FnCompiler<'te> {
             .function
             .new_local_ptr(context, temp_name, aggregate, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let struct_ptr_ty = *struct_ptr.get_type(context);
         let agg_value = self
             .current_block
             .ins(context)
-            .get_ptr(struct_ptr, struct_ptr_ty, 0)
+            .get_ptr(struct_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
 
         Ok(inserted_values_indices.into_iter().fold(
@@ -2152,11 +2140,10 @@ impl<'te> FnCompiler<'te> {
             .function
             .new_local_ptr(context, temp_name, aggregate, false, None)
             .map_err(|ir_error| CompileError::InternalOwned(ir_error.to_string(), Span::dummy()))?;
-        let enum_ptr_ty = *enum_ptr.get_type(context);
         let enum_ptr_value = self
             .current_block
             .ins(context)
-            .get_ptr(enum_ptr, enum_ptr_ty, 0)
+            .get_ptr(enum_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
         let agg_value = self
             .current_block
@@ -2227,11 +2214,10 @@ impl<'te> FnCompiler<'te> {
                 .map_err(|ir_error| {
                     CompileError::InternalOwned(ir_error.to_string(), Span::dummy())
                 })?;
-            let tuple_ptr_ty = *tuple_ptr.get_type(context);
             let agg_value = self
                 .current_block
                 .ins(context)
-                .get_ptr(tuple_ptr, tuple_ptr_ty, 0)
+                .get_ptr(tuple_ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
 
             Ok(init_values.into_iter().enumerate().fold(
@@ -2373,11 +2359,10 @@ impl<'te> FnCompiler<'te> {
                 .map_err(|ir_error| {
                     CompileError::InternalOwned(ir_error.to_string(), Span::dummy())
                 })?;
-            let struct_ptr_ty = *struct_ptr.get_type(context);
             let mut struct_val = self
                 .current_block
                 .ins(context)
-                .get_ptr(struct_ptr, struct_ptr_ty, 0)
+                .get_ptr(struct_ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
 
             for (field_idx, field_type) in fields.iter().enumerate() {
@@ -2428,11 +2413,10 @@ impl<'te> FnCompiler<'te> {
                 .add_metadatum(context, span_md_idx);
 
             // Convert the key pointer to a value using get_ptr
-            let key_ptr_ty = *key_ptr.get_type(context);
             let mut key_ptr_val = self
                 .current_block
                 .ins(context)
-                .get_ptr(key_ptr, key_ptr_ty, 0)
+                .get_ptr(key_ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
 
             // Store the const hash value to the key pointer value
@@ -2541,11 +2525,10 @@ impl<'te> FnCompiler<'te> {
                 .add_metadatum(context, span_md_idx);
 
             // Convert the key pointer to a value using get_ptr
-            let key_ptr_ty = *key_ptr.get_type(context);
             let mut key_ptr_val = self
                 .current_block
                 .ins(context)
-                .get_ptr(key_ptr, key_ptr_ty, 0)
+                .get_ptr(key_ptr, None, 0)
                 .add_metadatum(context, span_md_idx);
 
             // Store the const hash value to the key pointer value
@@ -2667,7 +2650,7 @@ impl<'te> FnCompiler<'te> {
         let value_ptr_val = self
             .current_block
             .ins(context)
-            .get_ptr(value_ptr, b256_ty, 0)
+            .get_ptr(value_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
 
         self.current_block
@@ -2705,7 +2688,7 @@ impl<'te> FnCompiler<'te> {
         let value_ptr_val = self
             .current_block
             .ins(context)
-            .get_ptr(value_ptr, b256_ty, 0)
+            .get_ptr(value_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
 
         // Store the value to the local pointer created for rhs
@@ -2766,7 +2749,7 @@ impl<'te> FnCompiler<'te> {
         let value_ptr_val = self
             .current_block
             .ins(context)
-            .get_ptr(value_ptr, *r#type, 0)
+            .get_ptr(value_ptr, Some(*r#type), 0)
             .add_metadatum(context, span_md_idx);
 
         for array_index in 0..number_of_elements {
@@ -2781,11 +2764,10 @@ impl<'te> FnCompiler<'te> {
                 .add_metadatum(context, span_md_idx);
 
                 // Convert the key pointer to a value using get_ptr
-                let key_ptr_ty = *key_ptr.get_type(context);
                 *key_ptr_val = self
                     .current_block
                     .ins(context)
-                    .get_ptr(*key_ptr, key_ptr_ty, 0)
+                    .get_ptr(*key_ptr, None, 0)
                     .add_metadatum(context, span_md_idx);
 
                 // Store the const hash value to the key pointer value
@@ -2799,7 +2781,7 @@ impl<'te> FnCompiler<'te> {
             let value_ptr_val_b256 = self
                 .current_block
                 .ins(context)
-                .get_ptr(value_ptr, b256_ty, array_index)
+                .get_ptr(value_ptr, None, array_index)
                 .add_metadatum(context, span_md_idx);
 
             self.current_block
@@ -2855,7 +2837,7 @@ impl<'te> FnCompiler<'te> {
         let value_ptr_val = self
             .current_block
             .ins(context)
-            .get_ptr(value_ptr, *r#type, 0)
+            .get_ptr(value_ptr, Some(*r#type), 0)
             .add_metadatum(context, span_md_idx);
 
         // Store the value to the local pointer created for rhs
@@ -2876,11 +2858,10 @@ impl<'te> FnCompiler<'te> {
                 .add_metadatum(context, span_md_idx);
 
                 // Convert the key pointer to a value using get_ptr
-                let key_ptr_ty = *key_ptr.get_type(context);
                 *key_ptr_val = self
                     .current_block
                     .ins(context)
-                    .get_ptr(*key_ptr, key_ptr_ty, 0)
+                    .get_ptr(*key_ptr, None, 0)
                     .add_metadatum(context, span_md_idx);
 
                 // Store the const hash value to the key pointer value
@@ -2894,7 +2875,7 @@ impl<'te> FnCompiler<'te> {
             let value_ptr_val_b256 = self
                 .current_block
                 .ins(context)
-                .get_ptr(value_ptr, b256_ty, array_index)
+                .get_ptr(value_ptr, None, array_index)
                 .add_metadatum(context, span_md_idx);
 
             // Finally, just call state_load_quad_word/state_store_quad_word

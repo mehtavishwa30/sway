@@ -877,7 +877,7 @@ impl<'ir> AsmBuilder<'ir> {
         &mut self,
         instr_val: &Value,
         base_ptr: &Pointer,
-        ptr_ty: &Pointer,
+        ptr_ty: &Option<Type>,
         offset: u64,
     ) {
         // `get_ptr` is like a `load` except the value isn't dereferenced.
@@ -890,8 +890,10 @@ impl<'ir> AsmBuilder<'ir> {
                     unimplemented!("TODO get_ptr() into the data section.");
                 }
                 Storage::Stack(word_offs) => {
-                    let ptr_ty_size_in_bytes =
-                        ir_type_size_in_bytes(self.context, ptr_ty.get_type(self.context));
+                    let ptr_ty = ptr_ty.unwrap_or_else(|| {
+                        base_ptr.get_type(self.context).strip_ptr_type(self.context)
+                    });
+                    let ptr_ty_size_in_bytes = ir_type_size_in_bytes(self.context, &ptr_ty);
 
                     let offset_in_bytes = word_offs * 8 + ptr_ty_size_in_bytes * offset;
                     let instr_reg = self.reg_seqr.next();
@@ -1524,7 +1526,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).is_b256(self.context));
+        assert!(ptr_ty.is_none());
 
         let val_reg = if matches!(
             val.get_instruction(self.context),
@@ -1542,7 +1544,7 @@ impl<'ir> AsmBuilder<'ir> {
             }
             let (val_ptr, ptr_ty, offset) = val_ptr.value.unwrap();
             // Expect the ptr_ty for val to also be B256
-            assert!(ptr_ty.get_type(self.context).is_b256(self.context));
+            assert!(ptr_ty.is_none());
             match self.ptr_map.get(&val_ptr) {
                 Some(Storage::Stack(val_offset)) => {
                     let base_reg = self.locals_base_reg().clone();
@@ -1600,7 +1602,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).is_b256(self.context));
+        assert!(ptr_ty.is_none());
 
         let load_reg = self.reg_seqr.next();
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
@@ -1661,7 +1663,7 @@ impl<'ir> AsmBuilder<'ir> {
 
         // Not expecting an offset here nor a pointer cast
         assert!(offset == 0);
-        assert!(ptr_ty.get_type(self.context).is_b256(self.context));
+        assert!(ptr_ty.is_none());
 
         let owning_span = self.md_mgr.val_to_span(self.context, *instr_val);
         match self.ptr_map.get(&key_ptr) {
@@ -1831,7 +1833,7 @@ impl<'ir> AsmBuilder<'ir> {
         ok((), Vec::new(), Vec::new())
     }
 
-    fn resolve_ptr(&mut self, ptr_val: &Value) -> CompileResult<(Pointer, Pointer, u64)> {
+    fn resolve_ptr(&mut self, ptr_val: &Value) -> CompileResult<(Pointer, Option<Type>, u64)> {
         match ptr_val.get_instruction(self.context) {
             Some(Instruction::GetPointer {
                 base_ptr,
