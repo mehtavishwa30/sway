@@ -318,7 +318,9 @@ impl Function {
 
     /// Add a value to the function local storage.
     ///
-    /// The name must be unique to this function else an error is returned.
+    /// The name must be unique to this function else an error is returned.  The `local_type` is
+    /// the raw type of the local value and will be wrapped in a `Pointer`.  I.e., to create a
+    /// local `u64` value the `local_type` should be `u64`, not `ptr u64`.
     pub fn new_local_ptr(
         &self,
         context: &mut Context,
@@ -327,7 +329,8 @@ impl Function {
         is_mutable: bool,
         initializer: Option<Constant>,
     ) -> Result<Pointer, IrError> {
-        let ptr = Pointer::new(context, local_type, is_mutable, initializer);
+        let ptr_ty = Type::new_pointer(context, local_type);
+        let ptr = Pointer::new(context, ptr_ty, is_mutable, initializer);
         let func = context.functions.get_mut(self.0).unwrap();
         func.local_storage
             .insert(name.clone(), ptr)
@@ -395,10 +398,13 @@ impl Function {
             .map(|(name, ptr)| (name.clone(), *ptr, context.pointers[ptr.0].clone()))
             .collect();
         for (name, old_ptr, old_ptr_content) in old_ptrs {
+            // XXX This is temporarily sucky - we need to trip the ptr type, else it will get
+            // double pointered.
+            let non_ptr_type = old_ptr_content.ty.strip_ptr_type(context);
             let new_ptr = self.new_unique_local_ptr(
                 context,
                 name.clone(),
-                old_ptr_content.ty,
+                non_ptr_type,
                 old_ptr_content.is_mutable,
                 old_ptr_content.initializer,
             );

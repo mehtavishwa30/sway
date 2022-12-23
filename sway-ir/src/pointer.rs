@@ -2,7 +2,12 @@
 //!
 //! NOTE: much of this was hastily put together and can be streamlined or refactored altogether.
 
-use crate::{constant::Constant, context::Context, irtype::Type, pretty::DebugWithContext};
+use crate::{
+    constant::Constant,
+    context::Context,
+    irtype::{Type, TypeContent},
+    pretty::DebugWithContext,
+};
 
 /// A wrapper around an [ECS](https://github.com/fitzgen/generational-arena) handle into the
 /// [`Context`].
@@ -27,7 +32,7 @@ impl Pointer {
         } else {
             "".to_string()
         };
-        format!("{mut_tag}ptr {}{}", ty.as_string(context), name_tag)
+        format!("{mut_tag}{}{name_tag}", ty.as_string(context))
     }
     /// Return a new pointer to a specific type with an optional [`Constant`] initializer.
     pub fn new(
@@ -36,6 +41,7 @@ impl Pointer {
         is_mutable: bool,
         initializer: Option<Constant>,
     ) -> Self {
+        assert!(ty.is_ptr_type(context));
         let content = PointerContent {
             ty,
             is_mutable,
@@ -44,9 +50,18 @@ impl Pointer {
         Pointer(context.pointers.insert(content))
     }
 
-    /// Return the type pointed to by this pointer.
+    /// Return the pointer type.  Will always be a `Type::Pointer(inner_ty)`.
     pub fn get_type<'a>(&self, context: &'a Context) -> &'a Type {
         &context.pointers[self.0].ty
+    }
+
+    /// Return the pointer type.  Will always be a `Type::Pointer(inner_ty)`.
+    pub fn get_pointee_type<'a>(&self, context: &'a Context) -> &'a Type {
+        if let TypeContent::Pointer(ptr_ty) = context.pointers[self.0].ty.get_content(context) {
+            ptr_ty
+        } else {
+            unreachable!("pointer::Pointer type must always be a `Type::Pointer(_)`");
+        }
     }
 
     /// Return the initializer for this pointer.

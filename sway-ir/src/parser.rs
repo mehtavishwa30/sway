@@ -255,8 +255,7 @@ mod ir_builder {
                 }
 
             rule op_get_ptr() -> IrAstOperation
-                = "get_ptr" _ mut_ptr() ty:ast_ty() name:id()
-                    comma() ptr() ty:ast_ty() comma() offset:(decimal())  {
+                = "get_ptr" _ ast_ty() name:id() comma() ty:ast_ty() comma() offset:(decimal())  {
                     IrAstOperation::GetPtr(name, ty, offset)
                 }
 
@@ -471,7 +470,7 @@ mod ir_builder {
                 / array_ty()
                 / struct_ty()
                 / union_ty()
-                / mp:mut_ptr() ty:ast_ty() { IrAstTy::Pointer(Box::new(ty)) }
+                / mut_ptr() ty:ast_ty() { IrAstTy::Pointer(Box::new(ty)) }
 
             rule array_ty() -> IrAstTy
                 = "[" _ ty:ast_ty() ";" _ c:decimal() "]" _ {
@@ -1138,7 +1137,7 @@ mod ir_builder {
                         let ptr_ir_ty = ptr_ty.to_ir_type(context);
                         block
                             .ins(context)
-                            .get_ptr(*ptr_map.get(&base_ptr).unwrap(), ptr_ir_ty, offset)
+                            .get_ptr(*ptr_map.get(&base_ptr).unwrap(), Some(ptr_ir_ty), offset)
                             .add_metadatum(context, opt_metadata)
                     }
                     IrAstOperation::Gtf(index, tx_field_id) => block

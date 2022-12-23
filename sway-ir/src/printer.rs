@@ -663,7 +663,9 @@ fn instruction_to_doc<'a>(
                         "{} = get_ptr {}, {}, {}",
                         namer.name(context, ins_value),
                         base_ptr.as_string(context, Some(name)),
-                        ptr_ty.as_string(context, None),
+                        ptr_ty
+                            .unwrap_or_else(|| *base_ptr.get_type(context))
+                            .as_string(context),
                         offset,
                     ))
                     .append(md_namer.md_idx_to_doc(context, metadata)),

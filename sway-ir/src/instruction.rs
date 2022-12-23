@@ -84,7 +84,7 @@ pub enum Instruction {
     /// Return a pointer as a value.
     GetPointer {
         base_ptr: Pointer,
-        ptr_ty: Pointer,
+        ptr_ty: Option<Type>,
         offset: u64,
     },
     /// Writing a specific value to an array.
@@ -247,7 +247,9 @@ impl Instruction {
             Instruction::ExtractValue {
                 struct_ty, indices, ..
             } => struct_ty.get_indexed_type(context, indices),
-            Instruction::GetPointer { ptr_ty, .. } => Some(*ptr_ty.get_type(context)),
+            Instruction::GetPointer {
+                base_ptr, ptr_ty, ..
+            } => ptr_ty.or_else(|| Some(*base_ptr.get_type(context))),
             Instruction::InsertElement { array, .. } => array.get_type(context),
             Instruction::InsertValue { aggregate, .. } => aggregate.get_type(context),
             Instruction::IntToPtr(_, ty) => Some(*ty),
@@ -292,22 +294,12 @@ impl Instruction {
 
     /// Some [`Instruction`]s may have struct arguments.  Return it if so for this instruction.
     pub fn get_aggregate(&self, context: &Context) -> Option<Type> {
-        let ty = match self {
-            Instruction::Call(func, _args) => Some(&context.functions[func.0].return_type),
-            Instruction::GetPointer { ptr_ty, .. } => Some(ptr_ty.get_type(context)),
+        match self {
+            Instruction::Call(..) | Instruction::GetPointer { .. } => self.get_type(context),
             // Unknown aggregate instruction.  Adding these as we come across them...
             _otherwise => None,
-        };
-        if let Some(ty) = ty {
-            // TODO: Rewrite using if-let chain.
-            if ty.is_array(context) && ty.is_struct(context) {
-                Some(*ty)
-            } else {
-                None
-            }
-        } else {
-            None
         }
+        .and_then(|ty| (ty.is_array(context) || ty.is_struct(context)).then_some(ty))
     }
 
     pub fn get_operands(&self) -> Vec<Value> {
@@ -851,13 +843,12 @@ impl<'a> InstructionInserter<'a> {
         )
     }
 
-    pub fn get_ptr(self, base_ptr: Pointer, ptr_ty: Type, offset: u64) -> Value {
-        let ptr = Pointer::new(self.context, ptr_ty, false, None);
+    pub fn get_ptr(self, base_ptr: Pointer, ptr_ty: Option<Type>, offset: u64) -> Value {
         make_instruction!(
             self,
             Instruction::GetPointer {
                 base_ptr,
-                ptr_ty: ptr,
+                ptr_ty,
                 offset,
             }
         )
@@ -989,7 +980,7 @@ impl<'a> InstructionInserter<'a> {
     }
 
     pub fn state_load_word(self, key: Value) -> Value {
-        let ret_ty = Type::new_unit(self.context);
+        let ret_ty = Type::new_uint(self.context, 64);
         make_instruction!(
             self,
             Instruction::FuelVm(FuelVmInstruction::StateLoadWord(key, ret_ty))
@@ -1031,4 +1022,67 @@ impl<'a> InstructionInserter<'a> {
             }
         )
     }
+}
+
+#[test]
+fn test_get_ptr_has_ptr_type() {
+    let mut context = Context::default();
+
+    let unit_ty = Type::new_unit(&mut context);
+    let u64_ty = Type::new_uint(&mut context, 64);
+    let b256_ty = Type::new_b256(&mut context);
+
+    let module = crate::module::Module::new(&mut context, crate::module::Kind::Script);
+
+    let func = crate::function::Function::new(
+        &mut context,
+        module,
+        "test".to_owned(),
+        Vec::new(),
+        unit_ty,
+        None,
+        false,
+        false,
+        None,
+    );
+
+    let i_ptr = func
+        .new_local_ptr(&mut context, "i".to_owned(), u64_ty, false, None)
+        .expect("Adding 'i' local");
+    let b_ptr = func
+        .new_local_ptr(&mut context, "b".to_owned(), b256_ty, false, None)
+        .expect("Adding 'b' local");
+
+    let block = crate::block::Block::new(&mut context, func, None);
+
+    let i_val = block.ins(&mut context).get_ptr(i_ptr, None, 0);
+    let b_val = block.ins(&mut context).get_ptr(b_ptr, None, 0);
+
+    assert!(i_val.get_type(&context).is_some());
+    assert!(i_val.get_type(&context).unwrap().is_ptr_type(&context));
+    assert!(i_val
+        .get_type(&context)
+        .unwrap()
+        .get_inner_ptr_type(&context)
+        .is_some());
+    assert!(i_val
+        .get_type(&context)
+        .unwrap()
+        .get_inner_ptr_type(&context)
+        .unwrap()
+        .is_uint_of(&context, 64));
+
+    assert!(b_val.get_type(&context).is_some());
+    assert!(b_val.get_type(&context).unwrap().is_ptr_type(&context));
+    assert!(b_val
+        .get_type(&context)
+        .unwrap()
+        .get_inner_ptr_type(&context)
+        .is_some());
+    assert!(b_val
+        .get_type(&context)
+        .unwrap()
+        .get_inner_ptr_type(&context)
+        .unwrap()
+        .is_b256(&context));
 }

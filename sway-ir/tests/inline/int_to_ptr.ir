@@ -6,7 +6,7 @@
 script {
     fn a(b: u64, __ret_value: mut ptr b256) -> b256 {
         entry(b: u64, __ret_value: mut ptr b256):
-        v0 = int_to_ptr b to b256
+        v0 = int_to_ptr b to ptr b256
         mem_copy __ret_value, v0, 32
         ret b256 __ret_value
     }
@@ -25,7 +25,7 @@ script {
         v2 = call a(v1, v0)
 // not: call
 
-// check: $(ret_ptr=$VAR) = int_to_ptr $arg0 to b256
+// check: $(ret_ptr=$VAR) = int_to_ptr $arg0 to ptr b256
 // check: mem_copy $retv, $ret_ptr, 32
 // check: br $(ret_block=$LABEL)($retv)
 

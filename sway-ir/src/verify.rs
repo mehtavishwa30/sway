@@ -582,11 +582,16 @@ impl<'a> InstructionVerifier<'a> {
     fn verify_get_ptr(
         &self,
         base_ptr: &Pointer,
-        _ptr_ty: &Pointer,
+        _ptr_ty: &Option<Type>,
         _offset: &u64,
     ) -> Result<(), IrError> {
         // We should perhaps verify that the offset and the casted type fit within the base type.
-        if !self.is_local_pointer(base_ptr) {
+        if !self
+            .cur_function
+            .local_storage
+            .values()
+            .any(|x| x == base_ptr)
+        {
             Err(IrError::VerifyGetNonExistentPointer)
         } else {
             Ok(())
@@ -804,10 +809,11 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_state_load_store(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
-        if !matches!(self.get_pointer_type(dst_val), Some(ty) if ty.is_b256(self.context)) {
+        if !matches!(dst_val.get_stripped_ptr_type(self.context), Some(ty) if ty.is_b256(self.context))
+        {
             Err(IrError::VerifyStateDestBadType("b256".to_owned()))
-        } else if !self
-            .get_pointer_type(key)
+        } else if !key
+            .get_stripped_ptr_type(self.context)
             .map_or(false, |t| t.is_b256(self.context))
         {
             Err(IrError::VerifyStateKeyBadType)
@@ -817,8 +823,8 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_state_load_word(&self, key: &Value) -> Result<(), IrError> {
-        if !self
-            .get_pointer_type(key)
+        if !key
+            .get_stripped_ptr_type(self.context)
             .map_or(false, |t| t.is_b256(self.context))
         {
             Err(IrError::VerifyStateKeyBadType)
@@ -828,8 +834,8 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_state_store_word(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
-        if !self
-            .get_pointer_type(key)
+        if !key
+            .get_stripped_ptr_type(self.context)
             .map_or(false, |t| t.is_b256(self.context))
         {
             Err(IrError::VerifyStateKeyBadType)
@@ -844,7 +850,7 @@ impl<'a> InstructionVerifier<'a> {
     }
 
     fn verify_store(&self, dst_val: &Value, stored_val: &Value) -> Result<(), IrError> {
-        let dst_ty = self.get_pointer_type(dst_val);
+        let dst_ty = dst_val.get_stripped_ptr_type(self.context);
         let stored_ty = stored_val.get_stripped_ptr_type(self.context);
         if dst_ty.is_none() {
             Err(IrError::VerifyStoreToNonPointer)
@@ -855,55 +861,9 @@ impl<'a> InstructionVerifier<'a> {
         }
     }
 
-    // This is a temporary workaround due to the fact that we don't support pointer arguments yet.
-    // We do treat non-copy types as references anyways though so this is fine. Eventually, we
-    // should allow function arguments to also be Pointer.
-    //
-    // Also, because we inline everything at the moment, this doesn't really matter and is added
-    // simply to make the verifier happy.
-    //
-    fn _is_ptr_argument(&self, ptr_val: &Value) -> bool {
-        match &self.context.values[ptr_val.0].value {
-            ValueDatum::Argument(BlockArgument { ty, .. }) => !ty.is_copy_type(self.context),
-            _otherwise => false,
-        }
-    }
-
-    fn get_pointer_type(&self, ptr_val: &Value) -> Option<Type> {
-        match &self.context.values[ptr_val.0].value {
-            ValueDatum::Instruction(Instruction::GetPointer { ptr_ty, .. }) => {
-                Some(*ptr_ty.get_type(self.context))
-            }
-            ValueDatum::Instruction(Instruction::IntToPtr(_, ty)) => Some(*ty),
-            ValueDatum::Argument(BlockArgument { ty, .. }) if ty.is_ptr_type(self.context) => {
-                ty.get_inner_ptr_type(self.context)
-            }
-            ValueDatum::Argument(BlockArgument { ty: arg_ty, .. }) => {
-                match arg_ty.is_copy_type(self.context) && !arg_ty.is_ptr_type(self.context) {
-                    true => None,
-                    false => Some(*arg_ty),
-                }
-            }
-            _otherwise => None,
-        }
-    }
-
-    fn is_local_pointer(&self, ptr: &Pointer) -> bool {
-        self.cur_function.local_storage.values().any(|x| x == ptr)
-    }
-
     // This is a really common operation above... calling `Value::get_type()` and then failing when
     // two don't match.
     fn opt_ty_not_eq(&self, l_ty: &Option<Type>, r_ty: &Option<Type>) -> bool {
         l_ty.is_none() || r_ty.is_none() || !l_ty.unwrap().eq(self.context, r_ty.as_ref().unwrap())
     }
-
-    //| XXX Will be used by verify_ret() when we have proper pointers fixed.
-    //|fn cur_func_is_entry(&self) -> bool {
-    //|    match self.cur_module.kind {
-    //|        Kind::Script | Kind::Predicate => self.cur_function.name == "main",
-    //|        Kind::Contract => self.cur_function.selector.is_some(),
-    //|        Kind::Library => false,
-    //|    }
-    //|}
 }
