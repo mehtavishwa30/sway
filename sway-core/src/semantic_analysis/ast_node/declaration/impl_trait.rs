@@ -158,7 +158,7 @@ impl ty::TyImplTrait {
                     trait_type_arguments,
                     span: block_span,
                     methods: new_methods,
-                    implementing_for_type_id,
+                    implementing_for_type_ref: implementing_for_type_id,
                     type_implementing_for_span: type_implementing_for_span.clone(),
                 }
             }
@@ -211,7 +211,7 @@ impl ty::TyImplTrait {
                     trait_type_arguments: vec![], // this is empty because abi definitions don't support generics
                     span: block_span,
                     methods: new_methods,
-                    implementing_for_type_id,
+                    implementing_for_type_ref: implementing_for_type_id,
                     type_implementing_for_span,
                 }
             }
@@ -568,7 +568,7 @@ impl ty::TyImplTrait {
             trait_type_arguments: vec![], // this is empty because impl selfs don't support generics on the "Self" trait,
             span: block_span,
             methods: methods_ids,
-            implementing_for_type_id,
+            implementing_for_type_ref: implementing_for_type_id,
             type_implementing_for_span,
         };
         ok(impl_trait, warnings, errors)
@@ -757,18 +757,18 @@ fn type_check_trait_implementation(
             }
 
             impl_method_param
-                .type_id
+                .type_ref
                 .replace_self_type(engines, self_type);
-            if !type_engine.look_up_type_id(impl_method_param.type_id).eq(
-                &type_engine.look_up_type_id(impl_method_signature_param.type_id),
+            if !type_engine.look_up_type_id(impl_method_param.type_ref).eq(
+                &type_engine.look_up_type_id(impl_method_signature_param.type_ref),
                 engines,
             ) {
                 errors.push(CompileError::MismatchedTypeInInterfaceSurface {
                     interface_name: interface_name(),
                     span: impl_method_param.type_span.clone(),
-                    given: engines.help_out(impl_method_param.type_id).to_string(),
+                    given: engines.help_out(impl_method_param.type_ref).to_string(),
                     expected: engines
-                        .help_out(impl_method_signature_param.type_id)
+                        .help_out(impl_method_signature_param.type_ref)
                         .to_string(),
                 });
                 continue;

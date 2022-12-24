@@ -23,7 +23,7 @@ pub enum TyDeclaration {
     AbiDeclaration(DeclarationId),
     // If type parameters are defined for a function, they are put in the namespace just for
     // the body of that function.
-    GenericTypeForFunctionScope { name: Ident, type_id: TypeId },
+    GenericTypeForFunctionScope { name: Ident, type_ref: TypeRef },
     ErrorRecovery(Span),
     StorageDeclaration(DeclarationId),
 }
@@ -44,11 +44,11 @@ impl PartialEqWithEngines for TyDeclaration {
             (
                 Self::GenericTypeForFunctionScope {
                     name: xn,
-                    type_id: xti,
+                    type_ref: xti,
                 },
                 Self::GenericTypeForFunctionScope {
                     name: yn,
-                    type_id: yti,
+                    type_ref: yti,
                 },
             ) => xn == yn && xti == yti,
             (Self::ErrorRecovery(x), Self::ErrorRecovery(y)) => x == y,
@@ -78,7 +78,7 @@ impl CopyTypes for TyDeclaration {
 }
 
 impl ReplaceSelfType for TyDeclaration {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         use TyDeclaration::*;
         match self {
             VariableDeclaration(ref mut var_decl) => var_decl.replace_self_type(engines, self_type),
@@ -505,7 +505,7 @@ impl TyDeclaration {
         &self,
         engines: Engines<'_>,
         access_span: &Span,
-    ) -> CompileResult<TypeId> {
+    ) -> CompileResult<TypeRef> {
         let mut warnings = vec![];
         let mut errors = vec![];
         let type_engine = engines.te();
@@ -559,7 +559,9 @@ impl TyDeclaration {
                     },
                 )
             }
-            TyDeclaration::GenericTypeForFunctionScope { type_id, .. } => *type_id,
+            TyDeclaration::GenericTypeForFunctionScope {
+                type_ref: type_id, ..
+            } => *type_id,
             decl => {
                 errors.push(CompileError::NotAType {
                     span: decl.span(),

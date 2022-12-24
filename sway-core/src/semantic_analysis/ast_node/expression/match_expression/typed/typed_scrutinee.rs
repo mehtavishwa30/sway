@@ -18,7 +18,7 @@ impl ty::TyScrutinee {
             Scrutinee::CatchAll { span } => {
                 let typed_scrutinee = ty::TyScrutinee {
                     variant: ty::TyScrutineeVariant::CatchAll,
-                    type_id: type_engine.insert_type(declaration_engine, TypeInfo::Unknown),
+                    type_ref: type_engine.insert_type(declaration_engine, TypeInfo::Unknown),
                     span,
                 };
                 ok(typed_scrutinee, warnings, errors)
@@ -26,7 +26,7 @@ impl ty::TyScrutinee {
             Scrutinee::Literal { value, span } => {
                 let typed_scrutinee = ty::TyScrutinee {
                     variant: ty::TyScrutineeVariant::Literal(value.clone()),
-                    type_id: type_engine.insert_type(declaration_engine, value.to_typeinfo()),
+                    type_ref: type_engine.insert_type(declaration_engine, value.to_typeinfo()),
                     span,
                 };
                 ok(typed_scrutinee, warnings, errors)
@@ -83,14 +83,14 @@ fn type_check_variable(
                     value,
                     constant_decl.value.return_type,
                 ),
-                type_id: constant_decl.value.return_type,
+                type_ref: constant_decl.value.return_type,
                 span,
             }
         }
         // Variable isn't a constant, so so we turn it into a [ty::TyScrutinee::Variable].
         _ => ty::TyScrutinee {
             variant: ty::TyScrutineeVariant::Variable(name),
-            type_id: type_engine.insert_type(declaration_engine, TypeInfo::Unknown),
+            type_ref: type_engine.insert_type(declaration_engine, TypeInfo::Unknown),
             span,
         },
     };
@@ -192,7 +192,7 @@ fn type_check_struct(
 
     let typed_scrutinee = ty::TyScrutinee {
         variant: ty::TyScrutineeVariant::StructScrutinee(struct_decl.name.clone(), typed_fields),
-        type_id: struct_decl.create_type_id(ctx.engines()),
+        type_ref: struct_decl.create_type_id(ctx.engines()),
         span,
     };
 
@@ -272,7 +272,7 @@ fn type_check_enum(
             variant,
             value: Box::new(typed_value),
         },
-        type_id: enum_type_id,
+        type_ref: enum_type_id,
         span,
     };
 
@@ -305,8 +305,8 @@ fn type_check_tuple(
             typed_elems
                 .iter()
                 .map(|x| TypeArgument {
-                    type_id: x.type_id,
-                    initial_type_id: x.type_id,
+                    type_id: x.type_ref,
+                    initial_type_id: x.type_ref,
                     span: span.clone(),
                 })
                 .collect(),
@@ -314,7 +314,7 @@ fn type_check_tuple(
     );
     let typed_scrutinee = ty::TyScrutinee {
         variant: ty::TyScrutineeVariant::Tuple(typed_elems),
-        type_id,
+        type_ref: type_id,
         span,
     };
 

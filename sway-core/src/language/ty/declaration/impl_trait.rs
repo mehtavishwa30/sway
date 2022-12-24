@@ -10,7 +10,7 @@ pub struct TyImplTrait {
     pub trait_name: CallPath,
     pub trait_type_arguments: Vec<TypeArgument>,
     pub methods: Vec<DeclarationId>,
-    pub implementing_for_type_id: TypeId,
+    pub implementing_for_type_ref: TypeRef,
     pub type_implementing_for_span: Span,
     pub span: Span,
 }
@@ -25,7 +25,7 @@ impl PartialEqWithEngines for TyImplTrait {
                 .trait_type_arguments
                 .eq(&other.trait_type_arguments, engines)
             && self.methods.eq(&other.methods, engines)
-            && self.implementing_for_type_id == other.implementing_for_type_id
+            && self.implementing_for_type_ref == other.implementing_for_type_ref
             && self.type_implementing_for_span == other.type_implementing_for_span
             && self.span == other.span
     }
@@ -36,7 +36,7 @@ impl CopyTypes for TyImplTrait {
         self.impl_type_parameters
             .iter_mut()
             .for_each(|x| x.copy_types(type_mapping, engines));
-        self.implementing_for_type_id
+        self.implementing_for_type_ref
             .copy_types(type_mapping, engines);
         self.methods
             .iter_mut()
@@ -45,11 +45,11 @@ impl CopyTypes for TyImplTrait {
 }
 
 impl ReplaceSelfType for TyImplTrait {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         self.impl_type_parameters
             .iter_mut()
             .for_each(|x| x.replace_self_type(engines, self_type));
-        self.implementing_for_type_id
+        self.implementing_for_type_ref
             .replace_self_type(engines, self_type);
         self.methods
             .iter_mut()

@@ -217,7 +217,7 @@ fn decl_validate(engines: Engines<'_>, decl: &ty::TyDeclaration) -> CompileResul
             );
             for param in parameters {
                 check!(
-                    check_type(engines, param.type_id, param.type_span.clone(), false),
+                    check_type(engines, param.type_ref, param.type_span.clone(), false),
                     continue,
                     warnings,
                     errors
@@ -275,7 +275,7 @@ fn decl_validate(engines: Engines<'_>, decl: &ty::TyDeclaration) -> CompileResul
             );
             for variant in variants {
                 check!(
-                    check_type(engines, variant.type_id, variant.span.clone(), false),
+                    check_type(engines, variant.type_ref, variant.span.clone(), false),
                     continue,
                     warnings,
                     errors

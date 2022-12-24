@@ -621,7 +621,7 @@ fn get_struct_type_info_from_type_id(
             }
             for var in variant_types.iter() {
                 if let Ok(Some(type_info)) =
-                    get_struct_type_info_from_type_id(type_engine, var.type_id)
+                    get_struct_type_info_from_type_id(type_engine, var.type_ref)
                 {
                     return Ok(Some(type_info));
                 }
@@ -754,7 +754,7 @@ fn connect_fn_params_struct_enums<'eng: 'cfg, 'cfg>(
 ) -> Result<(), CompileError> {
     let type_engine = engines.te();
     for fn_param in &fn_decl.parameters {
-        let ty = type_engine.to_typeinfo(fn_param.type_id, &fn_param.type_span)?;
+        let ty = type_engine.to_typeinfo(fn_param.type_ref, &fn_param.type_span)?;
         match ty {
             TypeInfo::Enum { name, .. } => {
                 let ty_index = match graph.namespace.find_enum(&name) {

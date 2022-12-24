@@ -1,9 +1,11 @@
 use core::fmt::Write;
 use core::hash::Hasher;
-use hashbrown::hash_map::RawEntryMut;
 use hashbrown::HashMap;
+use std::cell::RefCell;
 use std::hash::BuildHasher;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
+
+use typed_arena::Arena;
 
 use crate::concurrent_slab::ListDisplay;
 use crate::{
@@ -14,11 +16,11 @@ use crate::{
 use sway_error::{error::CompileError, type_error::TypeError, warning::CompileWarning};
 use sway_types::{span::Span, Ident, Spanned};
 
-#[derive(Debug, Default)]
 pub struct TypeEngine {
     pub(super) slab: ConcurrentSlab<TypeInfo>,
-    storage_only_types: ConcurrentSlab<TypeInfo>,
-    id_map: RwLock<HashMap<TypeInfo, TypeId>>,
+    arena: Arena<TypeRef>,
+    storage_only_types: ConcurrentSlab<TypeRef>,
+    id_map: RwLock<HashMap<TypeInfo, TypeRef>>,
     unify_map: RwLock<HashMap<TypeId, Vec<TypeId>>>,
 }
 
@@ -37,30 +39,45 @@ where
 }
 
 impl TypeEngine {
+    pub(crate) fn new() -> TypeEngine {
+        TypeEngine {
+            slab: Default::default(),
+            arena: Default::default(),
+            storage_only_types: Default::default(),
+            id_map: Default::default(),
+            unify_map: Default::default(),
+        }
+    }
+
     /// Inserts a [TypeInfo] into the [TypeEngine] and returns a [TypeId]
     /// referring to that [TypeInfo].
     pub(crate) fn insert_type(
         &self,
         declaration_engine: &DeclarationEngine,
         ty: TypeInfo,
-    ) -> TypeId {
-        let mut id_map = self.id_map.write().unwrap();
+    ) -> TypeRef {
+        // let mut id_map = self.id_map.write().unwrap();
 
-        let hash_builder = id_map.hasher().clone();
-        let ty_hash = make_hasher(&hash_builder, self)(&ty);
+        // let hash_builder = id_map.hasher().clone();
+        // let ty_hash = make_hasher(&hash_builder, self)(&ty);
 
-        let raw_entry = id_map.raw_entry_mut().from_hash(ty_hash, |x| {
-            x.eq(&ty, Engines::new(self, declaration_engine))
-        });
-        match raw_entry {
-            RawEntryMut::Occupied(o) => return *o.get(),
-            RawEntryMut::Vacant(_) if ty.can_change() => TypeId::new(self.slab.insert(ty)),
-            RawEntryMut::Vacant(v) => {
-                let type_id = TypeId::new(self.slab.insert(ty.clone()));
-                v.insert_with_hasher(ty_hash, ty, type_id, make_hasher(&hash_builder, self));
-                type_id
-            }
-        }
+        // let raw_entry = id_map.raw_entry_mut().from_hash(ty_hash, |x| {
+        //     x.eq(&ty, Engines::new(self, declaration_engine))
+        // });
+
+        // match raw_entry {
+        //     RawEntryMut::Occupied(o) => return *o.get(),
+        //     RawEntryMut::Vacant(_) if ty.can_change() => {
+        //         *self.arena.alloc(Arc::new(RefCell::new(ty)))
+        //     }
+        //     RawEntryMut::Vacant(v) => {
+        //         let type_id = TypeId::new(self.slab.insert(ty.clone()));
+        //         v.insert_with_hasher(ty_hash, ty, type_id, make_hasher(&hash_builder, self));
+        //         type_id
+        //     }
+        // }
+
+        *self.arena.alloc(Arc::new(RefCell::new(ty)))
     }
 
     pub(crate) fn insert_unified_type(&self, received: TypeId, expected: TypeId) {
@@ -115,8 +132,8 @@ impl TypeEngine {
     }
 
     /// Denotes the given [TypeId] as being used with storage.
-    pub(crate) fn set_type_as_storage_only(&self, id: TypeId) {
-        self.storage_only_types.insert(self.look_up_type_id(id));
+    pub(crate) fn set_type_as_storage_only(&self, type_ref: TypeRef) {
+        self.storage_only_types.insert(type_ref);
     }
 
     /// Checks if the given [TypeInfo] is a storage only type.
@@ -451,7 +468,7 @@ impl TypeEngine {
         type_info_prefix: Option<&Path>,
         namespace: &mut Namespace,
         mod_path: &Path,
-    ) -> CompileResult<TypeId> {
+    ) -> CompileResult<TypeRef> {
         let mut warnings = vec![];
         let mut errors = vec![];
         let engines = Engines::new(self, declaration_engine);
@@ -539,7 +556,10 @@ impl TypeEngine {
                         // return the id
                         type_id
                     }
-                    Some(ty::TyDeclaration::GenericTypeForFunctionScope { type_id, .. }) => type_id,
+                    Some(ty::TyDeclaration::GenericTypeForFunctionScope {
+                        type_ref: type_id,
+                        ..
+                    }) => type_id,
                     _ => {
                         errors.push(CompileError::UnknownTypeName {
                             name: name.to_string(),

@@ -27,7 +27,7 @@ impl CopyTypes for TyStructExpressionField {
 }
 
 impl ReplaceSelfType for TyStructExpressionField {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         self.value.replace_self_type(engines, self_type);
     }
 }

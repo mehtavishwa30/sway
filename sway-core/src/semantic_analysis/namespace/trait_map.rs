@@ -866,8 +866,8 @@ fn are_equal_minus_dynamic_types(type_engine: &TypeEngine, left: TypeId, right: 
                         acc && left.name == right.name
                             && are_equal_minus_dynamic_types(
                                 type_engine,
-                                left.type_id,
-                                right.type_id,
+                                left.type_ref,
+                                right.type_ref,
                             )
                     },
                 )

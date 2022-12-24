@@ -142,7 +142,7 @@ impl TypeParameter {
         // declaration.
         let type_parameter_decl = ty::TyDeclaration::GenericTypeForFunctionScope {
             name: name_ident.clone(),
-            type_id,
+            type_ref: type_id,
         };
         ctx.namespace
             .insert_symbol(name_ident.clone(), type_parameter_decl)

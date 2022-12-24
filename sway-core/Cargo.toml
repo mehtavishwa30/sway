@@ -33,5 +33,6 @@ sway-types = { version = "0.32.2", path = "../sway-types" }
 sway-utils = { version = "0.32.2", path = "../sway-utils" }
 thiserror = "1.0"
 tracing = "0.1"
+typed-arena = "2.0.1"
 uint = "0.9"
 vec1 = "1.8.0"

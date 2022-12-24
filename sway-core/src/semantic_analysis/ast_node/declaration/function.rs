@@ -221,11 +221,11 @@ fn test_function_selector_behavior() {
                 is_reference: false,
                 is_mutable: false,
                 mutability_span: Span::dummy(),
-                type_id: type_engine.insert_type(
+                type_ref: type_engine.insert_type(
                     &declaration_engine,
                     TypeInfo::Str(Length::new(5, Span::dummy())),
                 ),
-                initial_type_id: type_engine.insert_type(
+                initial_type_ref: type_engine.insert_type(
                     &declaration_engine,
                     TypeInfo::Str(Length::new(5, Span::dummy())),
                 ),
@@ -236,11 +236,11 @@ fn test_function_selector_behavior() {
                 is_reference: false,
                 is_mutable: false,
                 mutability_span: Span::dummy(),
-                type_id: type_engine.insert_type(
+                type_ref: type_engine.insert_type(
                     &declaration_engine,
                     TypeInfo::UnsignedInteger(IntegerBits::ThirtyTwo),
                 ),
-                initial_type_id: type_engine.insert_type(
+                initial_type_ref: type_engine.insert_type(
                     &declaration_engine,
                     TypeInfo::Str(Length::new(5, Span::dummy())),
                 ),

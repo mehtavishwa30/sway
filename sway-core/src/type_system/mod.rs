@@ -8,10 +8,11 @@ mod trait_constraint;
 mod type_argument;
 mod type_binding;
 mod type_engine;
-mod type_id;
+// mod type_id;
 mod type_info;
 mod type_mapping;
 mod type_parameter;
+mod type_ref;
 mod unconstrained_type_parameters;
 mod unify;
 
@@ -25,10 +26,11 @@ pub(crate) use trait_constraint::*;
 pub use type_argument::*;
 pub(crate) use type_binding::*;
 pub use type_engine::*;
-pub use type_id::*;
+// pub use type_id::*;
 pub use type_info::*;
 pub(crate) use type_mapping::*;
 pub use type_parameter::*;
+pub use type_ref::*;
 pub(crate) use unconstrained_type_parameters::*;
 
 use crate::error::*;
@@ -54,8 +56,8 @@ fn generic_enum_resolution() {
     let variant_types = vec![ty::TyEnumVariant {
         name: Ident::new_with_override("a", sp.clone()),
         tag: 0,
-        type_id: generic_type,
-        initial_type_id: generic_type,
+        type_ref: generic_type,
+        initial_type_ref: generic_type,
         span: sp.clone(),
         type_span: sp.clone(),
         attributes: transform::AttributesMap::default(),
@@ -76,8 +78,8 @@ fn generic_enum_resolution() {
     let variant_types = vec![ty::TyEnumVariant {
         name: Ident::new_with_override("a", sp.clone()),
         tag: 0,
-        type_id: boolean_type,
-        initial_type_id: boolean_type,
+        type_ref: boolean_type,
+        initial_type_ref: boolean_type,
         span: sp.clone(),
         type_span: sp.clone(),
         attributes: transform::AttributesMap::default(),
@@ -106,7 +108,7 @@ fn generic_enum_resolution() {
     {
         assert_eq!(name.as_str(), "Result");
         assert!(matches!(
-            type_engine.look_up_type_id(variant_types[0].type_id),
+            type_engine.look_up_type_id(variant_types[0].type_ref),
             TypeInfo::Boolean
         ));
     } else {

@@ -69,7 +69,7 @@ pub(crate) fn matcher(
     let mut errors = vec![];
     let ty::TyScrutinee {
         variant,
-        type_id,
+        type_ref: type_id,
         span,
     } = scrutinee;
 

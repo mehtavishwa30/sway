@@ -55,7 +55,7 @@ impl CopyTypes for TyAstNode {
 }
 
 impl ReplaceSelfType for TyAstNode {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         match self.content {
             TyAstNodeContent::ImplicitReturnExpression(ref mut exp) => {
                 exp.replace_self_type(engines, self_type)

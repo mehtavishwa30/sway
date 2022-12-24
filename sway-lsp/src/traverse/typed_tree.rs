@@ -166,7 +166,7 @@ impl<'a> TypedTree<'a> {
                     trait_name,
                     trait_type_arguments,
                     methods,
-                    implementing_for_type_id,
+                    implementing_for_type_ref: implementing_for_type_id,
                     type_implementing_for_span,
                     ..
                 }) = declaration_engine.get_impl_trait(decl_id.clone(), &decl_id.span())
@@ -625,10 +625,10 @@ impl<'a> TypedTree<'a> {
             .try_unwrap()
         {
             token.typed = Some(typed_token.clone());
-            token.type_def = Some(TypeDefinition::TypeId(param.type_id));
+            token.type_def = Some(TypeDefinition::TypeId(param.type_ref));
         }
 
-        self.collect_type_id(param.type_id, &typed_token, param.type_span.clone());
+        self.collect_type_id(param.type_ref, &typed_token, param.type_span.clone());
     }
 
     fn collect_type_id(&self, type_id: TypeId, typed_token: &TypedAstToken, type_span: Span) {
@@ -779,11 +779,11 @@ impl<'a> TypedTree<'a> {
             .try_unwrap()
         {
             token.typed = Some(typed_token.clone());
-            token.type_def = Some(TypeDefinition::TypeId(enum_variant.type_id));
+            token.type_def = Some(TypeDefinition::TypeId(enum_variant.type_ref));
         }
 
         self.collect_type_id(
-            enum_variant.type_id,
+            enum_variant.type_ref,
             &typed_token,
             enum_variant.type_span.clone(),
         );

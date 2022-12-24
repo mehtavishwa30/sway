@@ -44,7 +44,7 @@ impl ty::TyMatchExpression {
 
         let typed_exp = ty::TyMatchExpression {
             branches: typed_branches,
-            return_type_id: ctx.type_annotation(),
+            return_type: ctx.type_annotation(),
             span,
         };
         ok((typed_exp, typed_scrutinees), warnings, errors)
@@ -104,7 +104,7 @@ impl ty::TyMatchExpression {
                 (None, None) => result,
                 (None, Some(conditional)) => {
                     // TODO: figure out if this argument matters or not
-                    let ctx = ctx.by_ref().with_type_annotation(self.return_type_id);
+                    let ctx = ctx.by_ref().with_type_annotation(self.return_type);
                     check!(
                         instantiate_if_expression(
                             ctx,
@@ -119,7 +119,7 @@ impl ty::TyMatchExpression {
                     )
                 }
                 (Some(prev_if_exp), None) => {
-                    let ctx = ctx.by_ref().with_type_annotation(self.return_type_id);
+                    let ctx = ctx.by_ref().with_type_annotation(self.return_type);
                     let conditional = ty::TyExpression {
                         expression: ty::TyExpressionVariant::Literal(Literal::Boolean(true)),
                         return_type: type_engine.insert_type(declaration_engine, TypeInfo::Boolean),
@@ -139,7 +139,7 @@ impl ty::TyMatchExpression {
                     )
                 }
                 (Some(prev_if_exp), Some(conditional)) => {
-                    let ctx = ctx.by_ref().with_type_annotation(self.return_type_id);
+                    let ctx = ctx.by_ref().with_type_annotation(self.return_type);
                     check!(
                         instantiate_if_expression(
                             ctx,

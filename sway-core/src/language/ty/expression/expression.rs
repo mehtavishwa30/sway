@@ -14,7 +14,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TyExpression {
     pub expression: TyExpressionVariant,
-    pub return_type: TypeId,
+    pub return_type: TypeRef,
     pub span: Span,
 }
 
@@ -40,7 +40,7 @@ impl CopyTypes for TyExpression {
 }
 
 impl ReplaceSelfType for TyExpression {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         self.return_type.replace_self_type(engines, self_type);
         self.expression.replace_self_type(engines, self_type);
     }
@@ -283,7 +283,7 @@ impl CollectTypesMetadata for TyExpression {
                 }
                 for variant in enum_decl.variants.iter() {
                     res.append(&mut check!(
-                        variant.type_id.collect_types_metadata(ctx),
+                        variant.type_ref.collect_types_metadata(ctx),
                         return err(warnings, errors),
                         warnings,
                         errors
@@ -330,7 +330,7 @@ impl CollectTypesMetadata for TyExpression {
                     errors
                 ));
                 res.append(&mut check!(
-                    variant.type_id.collect_types_metadata(ctx),
+                    variant.type_ref.collect_types_metadata(ctx),
                     return err(warnings, errors),
                     warnings,
                     errors
@@ -379,7 +379,7 @@ impl CollectTypesMetadata for TyExpression {
             StorageReassignment(storage_reassignment) => {
                 for field in storage_reassignment.fields.iter() {
                     res.append(&mut check!(
-                        field.type_id.collect_types_metadata(ctx),
+                        field.type_ref.collect_types_metadata(ctx),
                         return err(warnings, errors),
                         warnings,
                         errors

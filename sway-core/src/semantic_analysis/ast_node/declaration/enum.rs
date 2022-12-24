@@ -92,8 +92,8 @@ impl ty::TyEnumVariant {
         ok(
             ty::TyEnumVariant {
                 name: variant.name.clone(),
-                type_id: enum_variant_type,
-                initial_type_id,
+                type_ref: enum_variant_type,
+                initial_type_ref: initial_type_id,
                 type_span: variant.type_span.clone(),
                 tag: variant.tag,
                 span: variant.span,

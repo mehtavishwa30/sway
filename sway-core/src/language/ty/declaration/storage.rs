@@ -43,7 +43,7 @@ impl TyStorageDeclaration {
         type_engine: &TypeEngine,
         fields: Vec<Ident>,
         storage_fields: &[TyStorageField],
-    ) -> CompileResult<(TyStorageAccess, TypeId)> {
+    ) -> CompileResult<(TyStorageAccess, TypeRef)> {
         let mut errors = vec![];
         let warnings = vec![];
 
@@ -72,7 +72,7 @@ impl TyStorageDeclaration {
 
         type_checked_buf.push(TyStorageAccessDescriptor {
             name: first_field.clone(),
-            type_id: *initial_field_type,
+            type_ref: *initial_field_type,
             span: first_field.span(),
         });
 
@@ -95,7 +95,7 @@ impl TyStorageDeclaration {
                 Some(struct_field) => {
                     type_checked_buf.push(TyStorageAccessDescriptor {
                         name: field.clone(),
-                        type_id: struct_field.type_id,
+                        type_ref: struct_field.type_id,
                         span: field.span().clone(),
                     });
                     available_struct_fields = update_available_struct_fields(struct_field.type_id);
@@ -115,7 +115,7 @@ impl TyStorageDeclaration {
             }
         }
 
-        let return_type = type_checked_buf[type_checked_buf.len() - 1].type_id;
+        let return_type = type_checked_buf[type_checked_buf.len() - 1].type_ref;
 
         ok(
             (

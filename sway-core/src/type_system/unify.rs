@@ -665,7 +665,7 @@ where
     if rn == en && rvs.len() == evs.len() && rtps.len() == etps.len() {
         rvs.iter().zip(evs.iter()).for_each(|(rv, ev)| {
             append!(
-                unifier(rv.type_id, ev.type_id, &rv.span, help_text),
+                unifier(rv.type_ref, ev.type_ref, &rv.span, help_text),
                 warnings,
                 errors
             );

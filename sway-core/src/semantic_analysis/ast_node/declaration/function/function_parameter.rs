@@ -57,8 +57,8 @@ impl ty::TyFunctionParameter {
             is_reference,
             is_mutable,
             mutability_span,
-            type_id,
-            initial_type_id,
+            type_ref: type_id,
+            initial_type_ref: initial_type_id,
             type_span,
         };
 
@@ -107,8 +107,8 @@ impl ty::TyFunctionParameter {
             is_reference,
             is_mutable,
             mutability_span,
-            type_id,
-            initial_type_id,
+            type_ref: type_id,
+            initial_type_ref: initial_type_id,
             type_span,
         };
 
@@ -123,15 +123,15 @@ fn insert_into_namespace(ctx: TypeCheckContext, typed_parameter: &ty::TyFunction
             name: typed_parameter.name.clone(),
             body: ty::TyExpression {
                 expression: ty::TyExpressionVariant::FunctionParameter,
-                return_type: typed_parameter.type_id,
+                return_type: typed_parameter.type_ref,
                 span: typed_parameter.name.span(),
             },
             mutability: ty::VariableMutability::new_from_ref_mut(
                 typed_parameter.is_reference,
                 typed_parameter.is_mutable,
             ),
-            return_type: typed_parameter.type_id,
-            type_ascription: typed_parameter.type_id,
+            return_type: typed_parameter.type_ref,
+            type_ascription: typed_parameter.type_ref,
             type_ascription_span: Some(typed_parameter.type_span.clone()),
         })),
     );

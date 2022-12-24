@@ -14,7 +14,7 @@ pub struct TyReassignment {
     // either a direct variable, so length of 1, or
     // at series of struct fields/array indices (array syntax)
     pub lhs_base_name: Ident,
-    pub lhs_type: TypeId,
+    pub lhs_type: TypeRef,
     pub lhs_indices: Vec<ProjectionKind>,
     pub rhs: TyExpression,
 }
@@ -37,7 +37,7 @@ impl CopyTypes for TyReassignment {
 }
 
 impl ReplaceSelfType for TyReassignment {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         self.rhs.replace_self_type(engines, self_type);
         self.lhs_type.replace_self_type(engines, self_type);
     }
@@ -158,7 +158,7 @@ impl TyStorageReassignment {
 #[derive(Clone, Debug)]
 pub struct TyStorageReassignDescriptor {
     pub name: Ident,
-    pub type_id: TypeId,
+    pub type_ref: TypeRef,
     pub(crate) span: Span,
 }
 
@@ -171,7 +171,7 @@ impl PartialEqWithEngines for TyStorageReassignDescriptor {
         let type_engine = engines.te();
         self.name == other.name
             && type_engine
-                .look_up_type_id(self.type_id)
-                .eq(&type_engine.look_up_type_id(other.type_id), engines)
+                .look_up_type_id(self.type_ref)
+                .eq(&type_engine.look_up_type_id(other.type_ref), engines)
     }
 }

@@ -155,7 +155,7 @@ pub(crate) fn reassign_storage_subfield(
 
     type_checked_buf.push(ty::TyStorageReassignDescriptor {
         name: first_field.clone(),
-        type_id: *initial_field_type,
+        type_ref: *initial_field_type,
         span: first_field.span(),
     });
 
@@ -180,7 +180,7 @@ pub(crate) fn reassign_storage_subfield(
                 curr_type = struct_field.type_id;
                 type_checked_buf.push(ty::TyStorageReassignDescriptor {
                     name: field.clone(),
-                    type_id: struct_field.type_id,
+                    type_ref: struct_field.type_id,
                     span: field.span().clone(),
                 });
                 available_struct_fields = update_available_struct_fields(struct_field.type_id);

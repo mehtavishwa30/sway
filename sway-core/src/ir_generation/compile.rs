@@ -389,10 +389,10 @@ fn convert_fn_param(
     context: &mut Context,
     param: &ty::TyFunctionParameter,
 ) -> Result<(String, Type, Span), CompileError> {
-    convert_resolved_typeid(type_engine, context, &param.type_id, &param.type_span).map(|ty| {
+    convert_resolved_typeid(type_engine, context, &param.type_ref, &param.type_span).map(|ty| {
         (
             param.name.as_str().into(),
-            if param.is_reference && type_engine.look_up_type_id(param.type_id).is_copy_type() {
+            if param.is_reference && type_engine.look_up_type_id(param.type_ref).is_copy_type() {
                 Type::Pointer(Pointer::new(context, ty, param.is_mutable, None))
             } else {
                 ty
@@ -592,7 +592,7 @@ fn compile_abi_method(
         .parameters
         .iter()
         .map(|param| {
-            convert_resolved_typeid(type_engine, context, &param.type_id, &param.type_span)
+            convert_resolved_typeid(type_engine, context, &param.type_ref, &param.type_span)
                 .map(|ty| (param.name.as_str().into(), ty, param.name.span()))
         })
         .collect::<Result<Vec<(String, Type, Span)>, CompileError>>()?;

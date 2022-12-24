@@ -1235,7 +1235,7 @@ impl<'eng> FnCompiler<'eng> {
         // be more accurate but also more fiddly.
         let fn_key = (
             callee.span(),
-            callee.parameters.iter().map(|p| p.type_id).collect(),
+            callee.parameters.iter().map(|p| p.type_ref).collect(),
             callee.type_parameters.iter().map(|tp| tp.type_id).collect(),
         );
         let new_callee = match self.recreated_fns.get(&fn_key).copied() {
@@ -1574,7 +1574,7 @@ impl<'eng> FnCompiler<'eng> {
             let is_ref_primitive = fn_param.is_some()
                 && self
                     .type_engine
-                    .look_up_type_id(fn_param.unwrap().type_id)
+                    .look_up_type_id(fn_param.unwrap().type_ref)
                     .is_copy_type()
                 && fn_param.unwrap().is_reference
                 && fn_param.unwrap().is_mutable;
@@ -1871,12 +1871,12 @@ impl<'eng> FnCompiler<'eng> {
         let access_type = convert_resolved_typeid_no_span(
             self.type_engine,
             context,
-            &fields.last().expect("guaranteed by grammar").type_id,
+            &fields.last().expect("guaranteed by grammar").type_ref,
         )?;
 
         // Get the list of indices used to access the storage field. This will be empty
         // if the storage field type is not a struct.
-        let base_type = fields[0].type_id;
+        let base_type = fields[0].type_ref;
         let field_idcs = get_indices_for_struct_access(self.type_engine, base_type, &fields[1..])?;
 
         // Do the actual work. This is a recursive function because we want to drill down
@@ -2286,13 +2286,13 @@ impl<'eng> FnCompiler<'eng> {
         let access_type = convert_resolved_typeid_no_span(
             self.type_engine,
             context,
-            &fields.last().expect("guaranteed by grammar").type_id,
+            &fields.last().expect("guaranteed by grammar").type_ref,
         )?;
 
         // Get the list of indices used to access the storage field. This will be empty
         // if the storage field type is not a struct.
         // FIXME: shouldn't have to extract the first field like this.
-        let base_type = fields[0].type_id;
+        let base_type = fields[0].type_ref;
         let field_idcs = get_indices_for_struct_access(self.type_engine, base_type, &fields[1..])?;
 
         // Do the actual work. This is a recursive function because we want to drill down

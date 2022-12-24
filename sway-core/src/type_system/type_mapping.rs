@@ -335,9 +335,9 @@ impl TypeMapping {
                 let variant_types = variant_types
                     .into_iter()
                     .map(|mut variant| {
-                        if let Some(type_id) = self.find_match(variant.type_id, engines) {
+                        if let Some(type_id) = self.find_match(variant.type_ref, engines) {
                             need_to_create_new = true;
-                            variant.type_id = type_id;
+                            variant.type_ref = type_id;
                         }
                         variant
                     })

@@ -662,7 +662,7 @@ impl Dependencies {
                 self.gather_from_iter(variant_types.iter(), |deps, variant| {
                     deps.gather_from_typeinfo(
                         type_engine,
-                        &type_engine.look_up_type_id(variant.type_id),
+                        &type_engine.look_up_type_id(variant.type_ref),
                     )
                 })
             }

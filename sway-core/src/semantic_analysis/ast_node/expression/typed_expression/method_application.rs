@@ -341,7 +341,7 @@ pub(crate) fn type_check_method_application(
         let (mut new_warnings, new_errors) = type_engine.unify_right_with_self(
             ctx.declaration_engine,
             arg.return_type,
-            param.type_id,
+            param.type_ref,
             ctx.self_type(),
             &arg.span,
             "This argument's type is not castable to the declared parameter type.",
@@ -351,7 +351,7 @@ pub(crate) fn type_check_method_application(
             errors.push(CompileError::ArgumentParameterTypeMismatch {
                 span: arg.span.clone(),
                 provided: engines.help_out(arg.return_type).to_string(),
-                should_be: engines.help_out(param.type_id).to_string(),
+                should_be: engines.help_out(param.type_ref).to_string(),
             });
         }
     }

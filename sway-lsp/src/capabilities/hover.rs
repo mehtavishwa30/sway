@@ -155,7 +155,7 @@ fn hover_format(engines: Engines<'_>, token: &Token, ident: &Ident) -> lsp_types
                 Some(extract_fn_signature(&func.span()))
             }
             TypedAstToken::TypedFunctionParameter(param) => {
-                Some(format_name_with_type(param.name.as_str(), &param.type_id))
+                Some(format_name_with_type(param.name.as_str(), &param.type_ref))
             }
             TypedAstToken::TypedStructField(field) => {
                 Some(format_name_with_type(field.name.as_str(), &field.type_id))

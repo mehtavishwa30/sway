@@ -19,7 +19,7 @@ pub(super) fn create_enum_aggregate(
     // getting one here anyway.  They don't need to be a tagged union either.
     let field_types: Vec<_> = variants
         .iter()
-        .map(|tev| convert_resolved_typeid_no_span(type_engine, context, &tev.type_id))
+        .map(|tev| convert_resolved_typeid_no_span(type_engine, context, &tev.type_ref))
         .collect::<Result<Vec<_>, CompileError>>()?;
 
     // Enums where all the variants are unit types don't really need the union. Only a tag is

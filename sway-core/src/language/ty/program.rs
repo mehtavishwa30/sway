@@ -85,7 +85,7 @@ impl TyProgram {
                 TyAstNodeContent::Declaration(TyDeclaration::ImplTrait(decl_id)) => {
                     let TyImplTrait {
                         methods,
-                        implementing_for_type_id,
+                        implementing_for_type_ref: implementing_for_type_id,
                         span,
                         ..
                     } = check!(

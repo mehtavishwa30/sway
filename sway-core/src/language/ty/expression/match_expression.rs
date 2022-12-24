@@ -5,7 +5,7 @@ use crate::{language::ty::*, semantic_analysis::MatchReqMap, type_system::*};
 #[derive(Debug)]
 pub(crate) struct TyMatchExpression {
     pub(crate) branches: Vec<TyMatchBranch>,
-    pub(crate) return_type_id: TypeId,
+    pub(crate) return_type: TypeRef,
     pub(crate) span: Span,
 }
 

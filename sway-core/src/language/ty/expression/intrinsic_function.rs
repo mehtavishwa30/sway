@@ -37,7 +37,7 @@ impl CopyTypes for TyIntrinsicFunctionKind {
 }
 
 impl ReplaceSelfType for TyIntrinsicFunctionKind {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         for arg in &mut self.arguments {
             arg.replace_self_type(engines, self_type);
         }

@@ -70,12 +70,12 @@ pub enum TyExpressionVariant {
         prefix: Box<TyExpression>,
         field_to_access: TyStructField,
         field_instantiation_span: Span,
-        resolved_type_of_parent: TypeId,
+        resolved_type_of_parent: TypeRef,
     },
     TupleElemAccess {
         prefix: Box<TyExpression>,
         elem_to_access_num: usize,
-        resolved_type_of_parent: TypeId,
+        resolved_type_of_parent: TypeRef,
         elem_to_access_span: Span,
     },
     EnumInstantiation {
@@ -493,7 +493,7 @@ impl CopyTypes for TyExpressionVariant {
 }
 
 impl ReplaceSelfType for TyExpressionVariant {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         use TyExpressionVariant::*;
         match self {
             Literal(..) => (),

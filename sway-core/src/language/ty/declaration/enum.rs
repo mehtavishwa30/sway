@@ -40,7 +40,7 @@ impl CopyTypes for TyEnumDeclaration {
 }
 
 impl ReplaceSelfType for TyEnumDeclaration {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
         self.variants
             .iter_mut()
             .for_each(|x| x.replace_self_type(engines, self_type));
@@ -109,8 +109,8 @@ impl TyEnumDeclaration {
 #[derive(Debug, Clone)]
 pub struct TyEnumVariant {
     pub name: Ident,
-    pub type_id: TypeId,
-    pub initial_type_id: TypeId,
+    pub type_ref: TypeRef,
+    pub initial_type_ref: TypeRef,
     pub type_span: Span,
     pub(crate) tag: usize,
     pub span: Span,
@@ -124,7 +124,7 @@ impl HashWithEngines for TyEnumVariant {
     fn hash<H: Hasher>(&self, state: &mut H, type_engine: &TypeEngine) {
         self.name.hash(state);
         type_engine
-            .look_up_type_id(self.type_id)
+            .look_up_type_id(self.type_ref)
             .hash(state, type_engine);
         self.tag.hash(state);
     }
@@ -139,20 +139,20 @@ impl PartialEqWithEngines for TyEnumVariant {
         let type_engine = engines.te();
         self.name == other.name
             && type_engine
-                .look_up_type_id(self.type_id)
-                .eq(&type_engine.look_up_type_id(other.type_id), engines)
+                .look_up_type_id(self.type_ref)
+                .eq(&type_engine.look_up_type_id(other.type_ref), engines)
             && self.tag == other.tag
     }
 }
 
 impl CopyTypes for TyEnumVariant {
     fn copy_types_inner(&mut self, type_mapping: &TypeMapping, engines: Engines<'_>) {
-        self.type_id.copy_types(type_mapping, engines);
+        self.type_ref.copy_types(type_mapping, engines);
     }
 }
 
 impl ReplaceSelfType for TyEnumVariant {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_id.replace_self_type(engines, self_type);
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
+        self.type_ref.replace_self_type(engines, self_type);
     }
 }

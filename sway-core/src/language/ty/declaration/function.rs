@@ -20,8 +20,8 @@ pub struct TyFunctionDeclaration {
     pub implementing_type: Option<TyDeclaration>,
     pub span: Span,
     pub attributes: transform::AttributesMap,
-    pub return_type: TypeId,
-    pub initial_return_type: TypeId,
+    pub return_type: TypeRef,
+    pub initial_return_type: TypeRef,
     pub type_parameters: Vec<TypeParameter>,
     /// Used for error messages -- the span pointing to the return type
     /// annotation of the function
@@ -119,7 +119,7 @@ impl UnconstrainedTypeParameters for TyFunctionDeclaration {
         if self
             .parameters
             .iter()
-            .map(|param| type_engine.look_up_type_id(param.type_id))
+            .map(|param| type_engine.look_up_type_id(param.type_ref))
             .any(|x| x.eq(&type_parameter_info, engines))
         {
             return true;
@@ -167,7 +167,7 @@ impl CollectTypesMetadata for TyFunctionDeclaration {
         }
         for param in self.parameters.iter() {
             body.append(&mut check!(
-                param.type_id.collect_types_metadata(ctx),
+                param.type_ref.collect_types_metadata(ctx),
                 return err(warnings, errors),
                 warnings,
                 errors
@@ -275,7 +275,9 @@ impl TyFunctionDeclaration {
             .iter()
             .map(
                 |TyFunctionParameter {
-                     type_id, type_span, ..
+                     type_ref: type_id,
+                     type_span,
+                     ..
                  }| {
                     type_engine
                         .to_typeinfo(*type_id, type_span)
@@ -303,16 +305,20 @@ impl TyFunctionDeclaration {
             .parameters
             .iter()
             .map(|x| fuels_types::TypeDeclaration {
-                type_id: x.initial_type_id.index(),
-                type_field: x.initial_type_id.get_json_type_str(type_engine, x.type_id),
-                components: x.initial_type_id.get_json_type_components(
+                type_id: x.initial_type_ref.index(),
+                type_field: x
+                    .initial_type_ref
+                    .get_json_type_str(type_engine, x.type_ref),
+                components: x.initial_type_ref.get_json_type_components(
                     type_engine,
                     types,
-                    x.type_id,
+                    x.type_ref,
                 ),
-                type_parameters: x
-                    .type_id
-                    .get_json_type_parameters(type_engine, types, x.type_id),
+                type_parameters: x.type_ref.get_json_type_parameters(
+                    type_engine,
+                    types,
+                    x.type_ref,
+                ),
             })
             .collect::<Vec<_>>();
 
@@ -346,11 +352,11 @@ impl TyFunctionDeclaration {
                 .iter()
                 .map(|x| fuels_types::TypeApplication {
                     name: x.name.to_string(),
-                    type_id: x.initial_type_id.index(),
-                    type_arguments: x.initial_type_id.get_json_type_arguments(
+                    type_id: x.initial_type_ref.index(),
+                    type_arguments: x.initial_type_ref.get_json_type_arguments(
                         type_engine,
                         types,
-                        x.type_id,
+                        x.type_ref,
                     ),
                 })
                 .collect(),
@@ -407,8 +413,8 @@ pub struct TyFunctionParameter {
     pub is_reference: bool,
     pub is_mutable: bool,
     pub mutability_span: Span,
-    pub type_id: TypeId,
-    pub initial_type_id: TypeId,
+    pub type_ref: TypeRef,
+    pub initial_type_ref: TypeRef,
     pub type_span: Span,
 }
 
@@ -421,21 +427,21 @@ impl PartialEqWithEngines for TyFunctionParameter {
         let type_engine = engines.te();
         self.name == other.name
             && type_engine
-                .look_up_type_id(self.type_id)
-                .eq(&type_engine.look_up_type_id(other.type_id), engines)
+                .look_up_type_id(self.type_ref)
+                .eq(&type_engine.look_up_type_id(other.type_ref), engines)
             && self.is_mutable == other.is_mutable
     }
 }
 
 impl CopyTypes for TyFunctionParameter {
     fn copy_types_inner(&mut self, type_mapping: &TypeMapping, engines: Engines<'_>) {
-        self.type_id.copy_types(type_mapping, engines);
+        self.type_ref.copy_types(type_mapping, engines);
     }
 }
 
 impl ReplaceSelfType for TyFunctionParameter {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_id.replace_self_type(engines, self_type);
+    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeRef) {
+        self.type_ref.replace_self_type(engines, self_type);
     }
 }
 

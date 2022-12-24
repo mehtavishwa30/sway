@@ -451,7 +451,7 @@ impl UnconstrainedTypeParameters for TypeInfo {
                     .iter()
                     .map(|variant| {
                         variant
-                            .type_id
+                            .type_ref
                             .type_parameter_is_unconstrained(engines, type_parameter)
                     })
                     .any(|x| x);
@@ -670,7 +670,7 @@ impl TypeInfo {
                     let names = variant_types
                         .iter()
                         .map(|ty| {
-                            let ty = match type_engine.to_typeinfo(ty.type_id, error_msg_span) {
+                            let ty = match type_engine.to_typeinfo(ty.type_ref, error_msg_span) {
                                 Err(e) => return err(vec![], vec![e.into()]),
                                 Ok(ty) => ty,
                             };
@@ -747,7 +747,7 @@ impl TypeInfo {
         match self {
             TypeInfo::Enum { variant_types, .. } => variant_types
                 .iter()
-                .all(|variant_type| id_uninhabited(variant_type.type_id)),
+                .all(|variant_type| id_uninhabited(variant_type.type_ref)),
             TypeInfo::Struct { fields, .. } => {
                 fields.iter().any(|field| id_uninhabited(field.type_id))
             }
@@ -764,7 +764,7 @@ impl TypeInfo {
             TypeInfo::Enum { variant_types, .. } => {
                 let mut found_unit_variant = false;
                 for variant_type in variant_types {
-                    let type_info = type_engine.look_up_type_id(variant_type.type_id);
+                    let type_info = type_engine.look_up_type_id(variant_type.type_ref);
                     if type_info.is_uninhabited(type_engine) {
                         continue;
                     }
@@ -922,7 +922,7 @@ impl TypeInfo {
                     for variant in variant_types.iter() {
                         inner_types.extend(
                             type_engine
-                                .look_up_type_id(variant.type_id)
+                                .look_up_type_id(variant.type_ref)
                                 .extract_inner_types(type_engine),
                         );
                     }
@@ -1018,7 +1018,7 @@ impl TypeInfo {
                     inner_types.extend(helper(type_param.type_id));
                 }
                 for variant in variant_types.iter() {
-                    inner_types.extend(helper(variant.type_id));
+                    inner_types.extend(helper(variant.type_ref));
                 }
             }
             TypeInfo::Struct {
@@ -1171,7 +1171,7 @@ impl TypeInfo {
                 for variant_type in variant_types.iter() {
                     let mut nested_types = check!(
                         type_engine
-                            .look_up_type_id(variant_type.type_id)
+                            .look_up_type_id(variant_type.type_ref)
                             .extract_nested_types(type_engine, span),
                         return err(warnings, errors),
                         warnings,

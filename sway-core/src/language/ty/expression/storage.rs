@@ -1,6 +1,6 @@
 use sway_types::{state::StateIndex, Ident, Span, Spanned};
 
-use crate::type_system::TypeId;
+use crate::TypeRef;
 
 /// Describes the full storage access including all the subfields
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,6 +29,6 @@ impl TyStorageAccess {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TyStorageAccessDescriptor {
     pub name: Ident,
-    pub(crate) type_id: TypeId,
+    pub(crate) type_ref: TypeRef,
     pub(crate) span: Span,
 }

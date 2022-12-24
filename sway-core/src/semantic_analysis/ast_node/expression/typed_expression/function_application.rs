@@ -64,7 +64,7 @@ pub(crate) fn instantiate_function_application(
                 type_engine.unify_right(
                     declaration_engine,
                     exp.return_type,
-                    param.type_id,
+                    param.type_ref,
                     &exp.span,
                     "The argument that has been provided to this function's type does \
                     not match the declared type of the parameter in the function \

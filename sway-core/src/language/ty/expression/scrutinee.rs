@@ -8,7 +8,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub(crate) struct TyScrutinee {
     pub(crate) variant: TyScrutineeVariant,
-    pub(crate) type_id: TypeId,
+    pub(crate) type_ref: TypeRef,
     pub(crate) span: Span,
 }
 
@@ -17,7 +17,7 @@ pub(crate) enum TyScrutineeVariant {
     CatchAll,
     Literal(Literal),
     Variable(Ident),
-    Constant(Ident, Literal, TypeId),
+    Constant(Ident, Literal, TypeRef),
     StructScrutinee(Ident, Vec<TyStructScrutineeField>),
     #[allow(dead_code)]
     EnumScrutinee {
