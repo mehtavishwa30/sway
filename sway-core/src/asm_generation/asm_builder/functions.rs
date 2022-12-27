@@ -600,11 +600,9 @@ impl<'ir> AsmBuilder<'ir> {
                     .insert_data_value(Entry::from_constant(self.context, constant));
                 self.ptr_map.insert(*ptr, Storage::Data(data_id));
             } else {
-                match ptr.get_type(self.context).get_content(self.context) {
-                    TypeContent::Unit
-                    | TypeContent::Bool
-                    | TypeContent::Uint(_)
-                    | TypeContent::Pointer(_) => {
+                let ptr_ty = ptr.get_type(self.context).strip_ptr_type(self.context);
+                match ptr_ty.get_content(self.context) {
+                    TypeContent::Unit | TypeContent::Bool | TypeContent::Uint(_) => {
                         self.ptr_map.insert(*ptr, Storage::Stack(stack_base));
                         stack_base += 1;
                     }
@@ -628,11 +626,11 @@ impl<'ir> AsmBuilder<'ir> {
                         self.ptr_map.insert(*ptr, Storage::Stack(stack_base));
 
                         // Reserve space by incrementing the base.
-                        stack_base += size_bytes_in_words!(ir_type_size_in_bytes(
-                            self.context,
-                            ptr.get_type(self.context)
-                        ));
+                        stack_base +=
+                            size_bytes_in_words!(ir_type_size_in_bytes(self.context, &ptr_ty));
                     }
+
+                    TypeContent::Pointer(_) => unreachable!("Pointer was stripped."),
                 };
             }
         }

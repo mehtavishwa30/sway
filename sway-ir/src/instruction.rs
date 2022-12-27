@@ -295,10 +295,14 @@ impl Instruction {
     /// Some [`Instruction`]s may have struct arguments.  Return it if so for this instruction.
     pub fn get_aggregate(&self, context: &Context) -> Option<Type> {
         match self {
-            Instruction::Call(..) | Instruction::GetPointer { .. } => self.get_type(context),
+            Instruction::Call(..)
+            | Instruction::GetPointer { .. }
+            | Instruction::ExtractValue { .. }
+            | Instruction::ExtractElement { .. } => self.get_type(context),
             // Unknown aggregate instruction.  Adding these as we come across them...
             _otherwise => None,
         }
+        .map(|ty| ty.strip_ptr_type(context))
         .and_then(|ty| (ty.is_array(context) || ty.is_struct(context)).then_some(ty))
     }
 

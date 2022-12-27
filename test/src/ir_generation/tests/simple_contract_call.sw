@@ -65,7 +65,7 @@ fn main() -> u64 {
 // check: $(get_b256_arg=$VAL) = get_ptr ptr b256 arg_for_get_b256, ptr b256, 0
 // check: $(get_b256_arg_lit=$VAL) = const b256 0x3333333333333333333333333333333333333333333333333333333333333333
 // check: store $get_b256_arg_lit, ptr $get_b256_arg
-// check: $(get_b256_arg_ptr=$VAL) = get_ptr ptr b256 arg_for_get_b256, ptr u64, 0
+// check: $(get_b256_arg_ptr=$VAL) = get_ptr ptr b256 arg_for_get_b256, u64, 0
 // check: $(get_b256_params_undef=$VAL) = get_ptr ptr { b256, u64, u64 } $ID, ptr { b256, u64, u64 }, 0
 // check: $(contract_id=$VAL) = const b256 0x0c1c50c2bf5ba4bb351b4249a2f5e7d86556fcb4a6ae90465ff6c86126eeb3c0
 // check: $(get_b256_params_0=$VAL) = insert_value $get_b256_params_undef, { b256, u64, u64 }, $contract_id, 0
@@ -89,7 +89,7 @@ fn main() -> u64 {
 // check: $(get_s_arg_0=$VAL) = insert_value $get_s_arg_undef, { u64, b256 }, $get_s_arg_x, 0
 // check: $(get_s_arg_y=$VAL) = const b256 0x5555555555555555555555555555555555555555555555555555555555555555
 // check: $VAL = insert_value $get_s_arg_0, { u64, b256 }, $get_s_arg_y, 1
-// check: $(get_s_arg_ptr=$VAL) = get_ptr mut ptr { u64, b256 } args_struct_for_get_s, ptr u64, 0
+// check: $(get_s_arg_ptr=$VAL) = get_ptr mut ptr { u64, b256 } args_struct_for_get_s, u64, 0
 // check: $(get_s_params_undef=$VAL) = get_ptr ptr { b256, u64, u64 } $ID, ptr { b256, u64, u64 }, 0
 // check: $(contract_id=$VAL) = const b256 0x0c1c50c2bf5ba4bb351b4249a2f5e7d86556fcb4a6ae90465ff6c86126eeb3c0
 // check: $(get_s_params_0=$VAL) = insert_value $get_s_params_undef, { b256, u64, u64 }, $contract_id, 0

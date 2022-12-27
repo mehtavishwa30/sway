@@ -22,7 +22,7 @@ fn main() -> u64 {
 // check: $(ret_val_1=$ID) = call $a_func($ID, $ret_arg_1)
 // check extract_value $ret_val_1, { u64, u64, u64 }, 2
 
-// check: fn $a_func($ID $MD: u64, __ret_value $MD: mut ptr { u64, u64, u64 }) -> { u64, u64, u64 }
+// check: fn $a_func($ID $MD: u64, __ret_value $MD: ptr { u64, u64, u64 }) -> { u64, u64, u64 }
 // check: mem_copy __ret_value
 // There should be only a single mem_copy
 // not: mem_copy __ret_value

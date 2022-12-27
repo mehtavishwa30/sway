@@ -53,7 +53,7 @@ impl StorageAccess for Contract {
 // check: $(key_0_1_val=$VAL) = const b256 0xc4f29cca5a7266ecbc35c82c55dd2b0059a3db4c83a3410653ec33aded8e9840
 // check: store $key_0_1_val, ptr $key_0_1_ptr
 
-// check: $(val_0_1_ptr=$VAL) = get_ptr mut ptr [b256; 2] val_for_0_1, ptr ( { u64, u64, u64, u64, u64 } | u64 ), 0
+// check: $(val_0_1_ptr=$VAL) = get_ptr mut ptr [b256; 2] val_for_0_1, ( { u64, u64, u64, u64, u64 } | u64 ), 0
 // check: store $enum_val, ptr $val_0_1_ptr
-// check: $(val_0_1_ptr_b256=$VAL) = get_ptr mut ptr [b256; 2] val_for_0_1, ptr b256, 0
+// check: $(val_0_1_ptr_b256=$VAL) = get_ptr mut ptr [b256; 2] val_for_0_1, b256, 0
 // check: state_store_quad_word ptr $val_0_1_ptr_b256, key ptr $key_0_1_ptr

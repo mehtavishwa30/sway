@@ -76,7 +76,7 @@ impl Pointer {
 
     /// Return whether this pointer is to a [`Type::Struct`] in particular.
     pub fn is_aggregate_ptr(&self, context: &Context) -> bool {
-        let ty = context.pointers[self.0].ty;
+        let ty = context.pointers[self.0].ty.strip_ptr_type(context);
         ty.is_array(context) || ty.is_struct(context) || ty.is_union(context)
     }
 

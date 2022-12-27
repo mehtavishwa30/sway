@@ -28,7 +28,7 @@ fn main() -> u64 {
 
 // fn a()...
 //
-// check: fn $a_func($ID $MD: bool, $ID $MD: u64, $ID $MD: u64, __ret_value $MD: mut ptr { u64, u64, u64 }) -> { u64, u64, u64 }
+// check: fn $a_func($ID $MD: bool, $ID $MD: u64, $ID $MD: u64, __ret_value $MD: ptr { u64, u64, u64 }) -> { u64, u64, u64 }
 // check: cbr $ID, $(block_0=$ID)(), $(block_1=$ID)()
 
 // A single mem_copy for each explicit return:

@@ -567,6 +567,9 @@ impl<'te> FnCompiler<'te> {
                 if target_ir_type.is_copy_type(context) {
                     Ok(gtf_reg)
                 } else {
+                    // XXX This needs to be reviewed.  `convert_resolved_typeid()` should probably
+                    // be returning `ptr <ty>` for ref types explicitly, rather than wrapping here.
+                    let target_ir_type = Type::new_pointer(context, target_ir_type);
                     Ok(self
                         .current_block
                         .ins(context)
@@ -637,10 +640,12 @@ impl<'te> FnCompiler<'te> {
                 let key_ptr_val = store_key_in_local_mem(self, context, key_value, span_md_idx)?;
                 // For quad word, the IR instructions take in a pointer rather than a raw u64.
                 let b256_type = Type::new_b256(context);
+                let b256_ptr_type = Type::new_pointer(context, b256_type);
+                // XXX Does int_to_ptr make sense here?
                 let val_ptr = self
                     .current_block
                     .ins(context)
-                    .int_to_ptr(val_value, b256_type)
+                    .int_to_ptr(val_value, b256_ptr_type)
                     .add_metadatum(context, span_md_idx);
                 match kind {
                     Intrinsic::StateLoadQuad => Ok(self
@@ -1929,7 +1934,7 @@ impl<'te> FnCompiler<'te> {
             ))
         };
 
-        let aggregate = if let Some(instruction) = array_val.get_instruction(context) {
+        let array_ty = if let Some(instruction) = array_val.get_instruction(context) {
             instruction
                 .get_aggregate(context)
                 .and_then(|t| if t.is_array(context) { Some(t) } else { None })
@@ -1973,7 +1978,7 @@ impl<'te> FnCompiler<'te> {
             Some(self),
             index_expr,
         ) {
-            let count = aggregate.get_array_len(context).unwrap();
+            let count = array_ty.get_array_len(context).unwrap();
             if constant_value >= count {
                 return Err(CompileError::ArrayOutOfBounds {
                     index: constant_value,
@@ -1991,7 +1996,7 @@ impl<'te> FnCompiler<'te> {
         Ok(self
             .current_block
             .ins(context)
-            .extract_element(array_val, aggregate, index_val)
+            .extract_element(array_val, array_ty, index_val)
             .add_metadatum(context, span_md_idx))
     }
 
@@ -2145,7 +2150,7 @@ impl<'te> FnCompiler<'te> {
             .ins(context)
             .get_ptr(enum_ptr, None, 0)
             .add_metadatum(context, span_md_idx);
-        let agg_value = self
+        let tagged_value = self
             .current_block
             .ins(context)
             .insert_value(enum_ptr_value, aggregate, tag_value, vec![0])
@@ -2162,16 +2167,16 @@ impl<'te> FnCompiler<'te> {
             };
 
         Ok(if has_single_field_type {
-            enum_ptr_value
+            tagged_value
         } else {
             match &contents {
-                None => enum_ptr_value,
+                None => tagged_value,
                 Some(te) => {
                     // Insert the value too.
                     let contents_value = self.compile_expression(context, md_mgr, te)?;
                     self.current_block
                         .ins(context)
-                        .insert_value(agg_value, aggregate, contents_value, vec![1])
+                        .insert_value(tagged_value, aggregate, contents_value, vec![1])
                         .add_metadatum(context, span_md_idx)
                 }
             }
@@ -2688,7 +2693,7 @@ impl<'te> FnCompiler<'te> {
         let value_ptr_val = self
             .current_block
             .ins(context)
-            .get_ptr(value_ptr, None, 0)
+            .get_ptr(value_ptr, Some(b256_ty), 0)
             .add_metadatum(context, span_md_idx);
 
         // Store the value to the local pointer created for rhs
@@ -2781,7 +2786,7 @@ impl<'te> FnCompiler<'te> {
             let value_ptr_val_b256 = self
                 .current_block
                 .ins(context)
-                .get_ptr(value_ptr, None, array_index)
+                .get_ptr(value_ptr, Some(b256_ty), array_index)
                 .add_metadatum(context, span_md_idx);
 
             self.current_block
@@ -2875,7 +2880,7 @@ impl<'te> FnCompiler<'te> {
             let value_ptr_val_b256 = self
                 .current_block
                 .ins(context)
-                .get_ptr(value_ptr, None, array_index)
+                .get_ptr(value_ptr, Some(b256_ty), array_index)
                 .add_metadatum(context, span_md_idx);
 
             // Finally, just call state_load_quad_word/state_store_quad_word

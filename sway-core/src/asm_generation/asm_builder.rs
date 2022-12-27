@@ -1544,7 +1544,9 @@ impl<'ir> AsmBuilder<'ir> {
             }
             let (val_ptr, ptr_ty, offset) = val_ptr.value.unwrap();
             // Expect the ptr_ty for val to also be B256
-            assert!(ptr_ty.is_none());
+            assert!(ptr_ty.map_or(true, |t| t
+                .strip_ptr_type(self.context)
+                .is_b256(self.context)));
             match self.ptr_map.get(&val_ptr) {
                 Some(Storage::Stack(val_offset)) => {
                     let base_reg = self.locals_base_reg().clone();
@@ -1648,7 +1650,7 @@ impl<'ir> AsmBuilder<'ir> {
         // Make sure that store_val is a U64 value.
         assert!(store_val
             .get_stripped_ptr_type(self.context)
-            .map_or_else(|| false, |t| t.is_b256(self.context)));
+            .map_or_else(|| false, |t| t.is_uint_of(self.context, 64)));
         let store_reg = self.value_to_register(store_val);
 
         // Expect the get_ptr here to have type b256 and offset = 0???
@@ -1705,9 +1707,9 @@ impl<'ir> AsmBuilder<'ir> {
                 Storage::Data(_) => unreachable!("BUG! Trying to store to the data section."),
                 Storage::Stack(word_offs) => {
                     let word_offs = *word_offs;
-                    let store_type = ptr.get_type(self.context);
+                    let store_type = ptr.get_type(self.context).strip_ptr_type(self.context);
                     let store_size_in_words =
-                        size_bytes_in_words!(ir_type_size_in_bytes(self.context, store_type));
+                        size_bytes_in_words!(ir_type_size_in_bytes(self.context, &store_type));
                     if store_type.is_copy_type(self.context) {
                         let base_reg = self.locals_base_reg().clone();
 

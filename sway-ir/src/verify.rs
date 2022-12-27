@@ -243,7 +243,7 @@ impl<'a> InstructionVerifier<'a> {
                             stored_val: dst_val,
                             key,
                             ret_ty: _,
-                        } => self.verify_state_load_store(dst_val, key)?,
+                        } => self.verify_state_load_or_store(dst_val, key)?,
                         FuelVmInstruction::StateStoreWord {
                             stored_val: dst_val,
                             key,
@@ -533,18 +533,15 @@ impl<'a> InstructionVerifier<'a> {
     fn verify_extract_element(
         &self,
         array: &Value,
-        ty: &Type,
+        array_ty: &Type,
         index_val: &Value,
     ) -> Result<(), IrError> {
         array.get_stripped_ptr_type(self.context).map_or(
             Err(IrError::VerifyAccessElementOnNonArray),
-            |array_ty| {
-                if !array_ty.is_array(self.context) {
+            |array_val_ty| {
+                if !array_val_ty.is_array(self.context) {
                     Err(IrError::VerifyAccessElementOnNonArray)
-                } else if !array_ty
-                    .get_array_elem_type(self.context)
-                    .map_or(false, |elem_ty| elem_ty.eq(self.context, ty))
-                {
+                } else if !array_ty.eq(self.context, &array_val_ty) {
                     Err(IrError::VerifyAccessElementInconsistentTypes)
                 } else if !index_val
                     .get_type(self.context)
@@ -624,7 +621,7 @@ impl<'a> InstructionVerifier<'a> {
                 Err(IrError::VerifyAccessElementInconsistentTypes)
             } else if self.opt_ty_not_eq(
                 &array_ty.get_array_elem_type(self.context),
-                &value.get_type(self.context),
+                &value.get_stripped_ptr_type(self.context),
             ) {
                 Err(IrError::VerifyInsertElementOfIncorrectType)
             } else if !index_val
@@ -678,7 +675,7 @@ impl<'a> InstructionVerifier<'a> {
         }
         if !ty.is_ptr_type(self.context) {
             return Err(IrError::VerifyIntToPtrToCopyType(
-                val_ty.as_string(self.context),
+                ty.as_string(self.context),
             ));
         }
 
@@ -808,7 +805,7 @@ impl<'a> InstructionVerifier<'a> {
             .and_then(|_| is_u64_or(coins, IrError::VerifySmoCoins))
     }
 
-    fn verify_state_load_store(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
+    fn verify_state_load_or_store(&self, dst_val: &Value, key: &Value) -> Result<(), IrError> {
         if !matches!(dst_val.get_stripped_ptr_type(self.context), Some(ty) if ty.is_b256(self.context))
         {
             Err(IrError::VerifyStateDestBadType("b256".to_owned()))

@@ -20,7 +20,7 @@ fn main() {
 
 // check: $(gtf2_index=$VAL) = const u64 2
 // check: $(gtf2=$VAL) = gtf $gtf2_index, 119
-// check: $(gtf2_int_to_ptr=$VAL) = int_to_ptr $gtf2 to b256, !6
+// check: $(gtf2_int_to_ptr=$VAL) = int_to_ptr $gtf2 to ptr b256, !6
 // check: $(field2_ptr=$VAL) = get_ptr ptr b256 field2, ptr b256, 0
 // check: store $gtf2_int_to_ptr, ptr $field2_ptr
 

@@ -49,5 +49,5 @@ impl StorageAccess for Contract {
 // check: $(local_key_ptr2=$VAL) = get_ptr mut ptr b256 key_for_0_1, ptr b256, 0
 // check: $(key2=$VAL) = const b256 0xc4f29cca5a7266ecbc35c82c55dd2b0059a3db4c83a3410653ec33aded8e9840
 // check: store $key2, ptr $local_key_ptr2
-// check: $(storage_val_ptr2=$VAL) = get_ptr mut ptr [b256; 2] val_for_0_1, ptr b256, 0
+// check: $(storage_val_ptr2=$VAL) = get_ptr mut ptr [b256; 2] val_for_0_1, b256, 0
 // check: state_load_quad_word ptr $storage_val_ptr2, key ptr $local_key_ptr2
