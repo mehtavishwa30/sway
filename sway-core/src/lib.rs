@@ -92,7 +92,8 @@ fn parse_in_memory(
     src: Arc<str>,
 ) -> Result<parsed::ParseProgram, ErrorEmitted> {
     let module = sway_parse::parse_file(handler, src, None)?;
-    let (kind, tree) = to_parsed_lang::convert_parse_tree(handler, engines, module)?;
+    let context = to_parsed_lang::Context::default();
+    let (kind, tree) = to_parsed_lang::convert_parse_tree(&context, handler, engines, module)?;
     let submodules = Default::default();
     let root = parsed::ParseModule { tree, submodules };
     Ok(parsed::ParseProgram { kind, root })
@@ -167,8 +168,10 @@ fn parse_module_tree(
     // This always recovers on parse errors for the file itself by skipping that file.
     let submodules = parse_submodules(handler, engines, &module, module_dir);
 
+    let context = to_parsed_lang::Context::default();
+
     // Convert from the raw parsed module to the `ParseTree` ready for type-check.
-    let (kind, tree) = to_parsed_lang::convert_parse_tree(handler, engines, module)?;
+    let (kind, tree) = to_parsed_lang::convert_parse_tree(&context, handler, engines, module)?;
 
     Ok((kind, parsed::ParseModule { tree, submodules }))
 }
