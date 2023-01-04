@@ -38,10 +38,7 @@ use std::{
     iter,
     mem::MaybeUninit,
     ops::ControlFlow,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 
 pub fn convert_parse_tree(
@@ -218,7 +215,7 @@ fn item_to_ast_nodes(
 }
 
 fn item_use_to_use_statements(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     item_use: ItemUse,
 ) -> Result<Vec<UseStatement>, ErrorEmitted> {
@@ -460,7 +457,7 @@ fn item_fn_to_function_declaration(
 }
 
 fn get_attributed_purity(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     attributes: &AttributesMap,
 ) -> Result<Purity, ErrorEmitted> {
@@ -804,8 +801,7 @@ fn item_configurable_to_constant_declarations(
     _attributes: AttributesMap,
 ) -> Result<Vec<ConstantDeclaration>, ErrorEmitted> {
     let mut errors = Vec::new();
-  
-   
+
     if context.module_has_configurable_block() {
         errors.push(ConvertParseTreeError::MultipleConfigurableBlocksInModule {
             span: item_configurable.span(),
@@ -844,7 +840,7 @@ fn item_configurable_to_constant_declarations(
         return Err(errors);
     }
 
-    context.set_module_has_configurable_block();
+    context.set_module_has_configurable_block(true);
 
     Ok(declarations)
 }
@@ -1591,14 +1587,11 @@ fn expr_to_expression(
             let var_decl_span = value.span();
 
             // Generate a deterministic name for the variable returned by the match expression.
-            // Because the parser is single threaded, the name generated below will be stable.
-            static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let match_return_var_name = format!(
                 "{}{}",
                 MATCH_RETURN_VAR_NAME_PREFIX,
-                COUNTER.load(Ordering::SeqCst)
+                context.next_match_expression_return_var_unique_suffix(),
             );
-            COUNTER.fetch_add(1, Ordering::SeqCst);
             let var_decl_name = Ident::new_with_override(
                 Box::leak(match_return_var_name.into_boxed_str()),
                 var_decl_span.clone(),
@@ -2151,7 +2144,7 @@ fn expr_to_length(
     Ok(Length::new(expr_to_usize(context, handler, expr)?, span))
 }
 
-fn expr_to_usize(context: &Context, handler: &Handler, expr: Expr) -> Result<usize, ErrorEmitted> {
+fn expr_to_usize(_context: &Context, handler: &Handler, expr: Expr) -> Result<usize, ErrorEmitted> {
     let span = expr.span();
     let value = match expr {
         Expr::Literal(sway_ast::Literal::Int(lit_int)) => {
@@ -2225,7 +2218,7 @@ fn path_type_to_supertrait(
 }
 
 fn path_type_segment_to_ident(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     PathTypeSegment { name, generics_opt }: PathTypeSegment,
 ) -> Result<Ident, ErrorEmitted> {
@@ -2254,7 +2247,7 @@ fn path_expr_segment_to_ident_or_type_argument(
 }
 
 fn path_expr_segment_to_ident(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     PathExprSegment { name, generics_opt }: &PathExprSegment,
 ) -> Result<Ident, ErrorEmitted> {
@@ -2418,7 +2411,7 @@ fn if_expr_to_expression(
 ///
 /// Throws an error when given `<Foo as Bar>::baz`.
 fn path_root_opt_to_bool(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     root_opt: Option<(Option<AngleBrackets<QualifiedPathRoot>>, DoubleColonToken)>,
 ) -> Result<bool, ErrorEmitted> {
@@ -2435,7 +2428,7 @@ fn path_root_opt_to_bool(
 }
 
 fn literal_to_literal(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     literal: sway_ast::Literal,
 ) -> Result<Literal, ErrorEmitted> {
@@ -2832,12 +2825,12 @@ fn statement_let_to_ast_nodes(
             Pattern::Struct { path, fields, .. } => {
                 let mut ast_nodes = Vec::new();
 
-                // Generate a deterministic name for the destructured struct
-                // Because the parser is single threaded, the name generated below will be stable.
-                static COUNTER: AtomicUsize = AtomicUsize::new(0);
-                let destructured_name =
-                    format!("{}{}", DESTRUCTURE_PREFIX, COUNTER.load(Ordering::SeqCst));
-                COUNTER.fetch_add(1, Ordering::SeqCst);
+                // Generate a deterministic name for the destructured field
+                let destructured_name = format!(
+                    "{}{}",
+                    DESTRUCTURE_PREFIX,
+                    context.next_destructured_struct_unique_suffix()
+                );
                 let destructure_name = Ident::new_with_override(
                     Box::leak(destructured_name.into_boxed_str()),
                     path.prefix.name.span(),
@@ -2924,12 +2917,15 @@ fn statement_let_to_ast_nodes(
                 let mut ast_nodes = Vec::new();
 
                 // Generate a deterministic name for the tuple.
-                // Because the parser is single threaded, the name generated below will be stable.
-                static COUNTER: AtomicUsize = AtomicUsize::new(0);
-                let tuple_name = format!("{}{}", TUPLE_NAME_PREFIX, COUNTER.load(Ordering::SeqCst));
-                COUNTER.fetch_add(1, Ordering::SeqCst);
+                let tuple_name = format!(
+                    "{}{}",
+                    TUPLE_NAME_PREFIX,
+                    context.next_destructured_tuple_unique_suffix()
+                );
                 let tuple_name =
                     Ident::new_with_override(Box::leak(tuple_name.into_boxed_str()), span.clone());
+
+                dbg!(&tuple_name);
 
                 // Parse the type ascription and the type ascription span.
                 // In the event that the user did not provide a type ascription,
@@ -3548,7 +3544,7 @@ where
 }
 
 fn item_attrs_to_map(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     attribute_list: &[AttributeDecl],
 ) -> Result<AttributesMap, ErrorEmitted> {
@@ -3602,7 +3598,7 @@ fn item_attrs_to_map(
 }
 
 fn error_if_self_param_is_not_allowed(
-    context: &Context,
+    _context: &Context,
     handler: &Handler,
     parameters: &[FunctionParameter],
     fn_kind: &str,

@@ -46,28 +46,34 @@ impl TyProgram {
         // Validate all submodules
         let mut configurables = Vec::<TyConstantDeclaration>::new();
         for (_, submodule) in &root.submodules {
-            configurables.extend(
-                check!(
-                    Self::validate_root(
-                        engines,
-                        &submodule.module,
-                        parsed::TreeType::Library {
-                            name: submodule.library_name.clone(),
-                        },
-                        submodule.library_name.span().clone(),
-                    ),
-                    continue,
-                    warnings,
-                    errors
-                )
-                .2,
-            );
+            let configurables_in_submodule = check!(
+                Self::validate_root(
+                    engines,
+                    &submodule.module,
+                    parsed::TreeType::Library {
+                        name: submodule.library_name.clone(),
+                    },
+                    submodule.library_name.span().clone(),
+                ),
+                continue,
+                warnings,
+                errors
+            )
+            .2;
+            if !configurables.is_empty() && !configurables_in_submodule.is_empty() {
+                errors.push(CompileError::ConfigurablesInMultipleModules {
+                    span: configurables_in_submodule[0].span.clone(),
+                });
+            }
+
+            configurables.extend(configurables_in_submodule);
         }
 
         let mut mains = Vec::new();
         let mut declarations = Vec::<TyDeclaration>::new();
         let mut abi_entries = Vec::new();
         let mut fn_declarations = std::collections::HashSet::new();
+        let mut found_first_configurable_in_module = false;
         for node in &root.all_nodes {
             match &node.content {
                 TyAstNodeContent::Declaration(TyDeclaration::FunctionDeclaration(decl_id)) => {
@@ -94,7 +100,13 @@ impl TyProgram {
                 TyAstNodeContent::Declaration(TyDeclaration::ConstantDeclaration(decl_id)) => {
                     match declaration_engine.get_constant(decl_id.clone(), &node.span) {
                         Ok(config_decl) if config_decl.is_configurable => {
-                            configurables.push(config_decl)
+                            if !found_first_configurable_in_module && !configurables.is_empty() {
+                                errors.push(CompileError::ConfigurablesInMultipleModules {
+                                    span: config_decl.span.clone(),
+                                });
+                            }
+                            configurables.push(config_decl);
+                            found_first_configurable_in_module = true;
                         }
                         _ => {}
                     }
