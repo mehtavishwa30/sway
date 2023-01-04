@@ -1,0 +1,5 @@
+category = "fail"
+
+# check: $()configurable {
+# nextln: $()Y: u64 = 42,
+# nextln: $()Configurable constants found in multiple modules.

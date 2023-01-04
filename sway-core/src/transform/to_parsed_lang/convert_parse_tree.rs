@@ -2925,8 +2925,6 @@ fn statement_let_to_ast_nodes(
                 let tuple_name =
                     Ident::new_with_override(Box::leak(tuple_name.into_boxed_str()), span.clone());
 
-                dbg!(&tuple_name);
-
                 // Parse the type ascription and the type ascription span.
                 // In the event that the user did not provide a type ascription,
                 // it is set to TypeInfo::Unknown and the span to None.
