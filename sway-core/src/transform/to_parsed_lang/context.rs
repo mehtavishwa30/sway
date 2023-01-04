@@ -13,12 +13,17 @@ pub struct Context {
 #[derive(Default)]
 struct ContextInner {
     /// docstring
-    found_configurable_block: bool,
+    module_has_configurable_block: bool,
 }
 
 impl Context {
+    /// docstring 
+    pub fn set_module_has_configurable_block(&self) {
+        self.inner.borrow_mut().module_has_configurable_block = true;
+    }
+
     /// docstring
-    pub fn has_configurable_block(self) -> bool {
-        self.inner.into_inner().found_configurable_block
+    pub fn module_has_configurable_block(&self) -> bool {
+        self.inner.borrow().module_has_configurable_block
     }
 }
