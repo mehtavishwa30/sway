@@ -713,6 +713,8 @@ pub enum CompileError {
     },
     #[error("Configurable constants found in multiple modules.")]
     ConfigurablesInMultipleModules { span: Span },
+    #[error("The name `{name}` is defined multiple times")]
+    NameDefinedMultipleTimes { name: Ident },
 }
 
 impl std::convert::From<TypeError> for CompileError {
@@ -901,6 +903,7 @@ impl Spanned for CompileError {
             CoinsPassedToNonPayableMethod { span, .. } => span.clone(),
             TraitImplPayabilityMismatch { span, .. } => span.clone(),
             ConfigurablesInMultipleModules { span, .. } => span.clone(),
+            NameDefinedMultipleTimes { name } => name.span(),
         }
     }
 }
