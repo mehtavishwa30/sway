@@ -4,6 +4,7 @@ use ::alloc::{alloc, realloc};
 use ::assert::assert;
 use ::option::Option;
 use ::convert::From;
+use core::ops::Eq;
 
 struct RawVec<T> {
     ptr: raw_ptr,
@@ -422,6 +423,202 @@ impl<T> Vec<T> {
 
         index_ptr.write::<T>(value);
     }
+
+    /// Returns `true` if the vector contains an element with the given `value`.
+    ///
+    /// This operation is O(n).
+    ///
+    /// ### Arguments
+    ///
+    /// * value - The value to check
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// use std::vec::Vec;
+    ///
+    /// let vec = Vec::new();
+    /// vec.push(1);
+    /// vec.push(2);
+    ///
+    /// assert(vec.contains(2));
+    /// assert(!vec.contains(3));
+    /// ```
+    pub fn contains<T>(ref mut self, value: T) -> bool
+    where
+        T: Eq
+    {
+        let mut i = 0;
+        while i < self.len {
+            let index_ptr = self.buf.ptr.add::<T>(i);
+            if value == index_ptr.read::<T>() {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+
+    /// Moves all elements of `other` into `self`, leaving `other` empty.
+    ///
+    /// ### Arguments
+    ///
+    /// * other - The vector to append to self
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// use std::vec::Vec;
+    ///
+    /// let a = Vec::new();
+    /// a.push(1);
+    /// a.push(2);
+    ///
+    /// let b = Vec::new();
+    /// b.push(3);
+    /// b.push(4);
+    ///
+    /// a.append(b);
+    ///
+    /// let c = Vec::new();
+    /// c.push(1);
+    /// c.push(2);
+    /// c.push(3);
+    /// c.push(4);
+    ///
+    /// assert(a.get(0).unwrap() == c.get(0).unwrap());
+    /// assert(a.get(1).unwrap() == c.get(1).unwrap());
+    /// assert(a.get(2).unwrap() == c.get(2).unwrap());
+    /// assert(a.get(3).unwrap() == c.get(3).unwrap());
+    /// ```
+    pub fn append(ref mut self, ref other: Vec<T>) {
+        let both_len = self.len + other.len;
+        let other_start = self.len;
+
+        // reallocate with combined capacity, write `other`, set buffer capacity
+        self.buf.ptr = realloc::<T>(self.ptr, self.cap, both_len);
+        self.buf.ptr.add::<T>(other_start).write::<Vec<T>>(other);
+
+        // set capacity and length
+        self.buf.cap = both_len;
+        self.len = both_len;
+
+        // clear `other`
+        other.clear();
+    }
+
+    /// Splits the collection into two at the given index.
+    ///
+    /// Returns a newly allocated vector containing the elements at the range
+    /// `[at, len)`. After the call, the original vector will be left containing
+    /// the elements `[0, at)` with its previous capacity unchanged.
+    ///
+    /// ### Arguments
+    ///
+    /// * at - Index at which the vector is to be split
+    ///
+    /// ### Reverts
+    ///
+    /// * if `at > self.len`
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let mut vec = Vec::new();
+    /// vec.push(1);
+    /// vec.push(2);
+    /// vec.push(3);
+    /// let vec2 = vec.split_off(1);
+    ///
+    /// assert(vec[0] == 1);
+    /// assert(vec2[0] == 2);
+    /// assert(vec2[1] == 3);
+    /// ```
+    pub fn split_off(ref mut self, at: u64) -> Vec<T> {
+        assert(self.len >= at);
+
+        // allocate the second vector
+        let second_len = self.len - at;
+        let mut second_vec = Vec::with_capacity(second_len);
+
+        // copy `self[at..]` to second vector
+        second_vec.len = second_len;
+        self.buf.ptr.add::<T>(at).copy_to::<T>(second_vec.buf.ptr, second_len);
+        second_vec.len = second_len;
+
+        // remove `self[at..]` from self
+        self.len = at - 1;
+
+        second_vec
+    }
+
+    /// Divides one slice into two at an index.
+    ///
+    /// The first will contain all indices from `[0, mid)` (excluding the index
+    /// `mid` itself) and the second will contain all indices from `[mid, len)`
+    /// (excluding the index `len` itself).
+    ///
+    /// ### Arguments
+    ///
+    /// * mid - Index at which the vector is to be split
+    ///
+    /// ### Reverts
+    ///
+    /// * if `mid > self.len`
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let v = Vec::new();
+    /// v.push(1);
+    /// v.push(2);
+    /// v.push(3);
+    /// v.push(4);
+    ///
+    /// let (left, right) = v.split_at(2);
+    ///
+    /// assert(left[0] == 1);
+    /// assert(left[1] == 2);
+    /// assert(right[0] == 3);
+    /// assert(right[1] == 4);
+    /// ```
+    pub fn split_at(self, mid: u64) -> (Vec<T>, Vec<T>) {
+        assert(self.len >= mid);
+
+        // get lengths
+        let left_len = mid;
+        let right_len = self.len - mid;
+
+        // allocate `left` and `right`
+        let mut left = Vec::with_capacity::<T>(left_len);
+        let mut right = Vec::with_capacity::<T>(right_len);
+
+        // copy `self[..mid]` to `left`, `self[mid..]` to `right`
+        self.buf.ptr.copy_to::<T>(left.buf.ptr, left_len);
+        self.buf.ptr.add::<T>(mid).copy_to::<T>(right.buf.ptr, right_len);
+
+        // assign lengths
+        left.len = left_len;
+        right.len = right_len;
+
+        (left, right)
+    }
+
+    /// Returns the first element of the vector, or `None` if it is empty.
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let v = Vec::new();
+    /// v.push(1);
+    /// v.push(2);
+    ///
+    /// let w = Vec::new();
+    ///
+    /// assert(v.first().unwrap() == 1);
+    /// assert(w.first().is_none());
+    /// ```
+    pub fn first(self) -> Option<T> {}
 }
 
 impl<T> AsRawSlice for Vec<T> {
