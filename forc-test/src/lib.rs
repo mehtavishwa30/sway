@@ -20,7 +20,7 @@ pub enum Tested {
 /// The result of testing a specific package.
 #[derive(Debug)]
 pub struct TestedPackage {
-    pub built: Box<pkg::BuiltPackage>,
+    pub built: Box<pkg::BuiltPackageDetails>,
     /// The resulting `ProgramState` after executing the test.
     pub tests: Vec<TestResult>,
 }
@@ -68,7 +68,7 @@ pub enum BuiltTests {
 #[derive(Debug)]
 pub enum PackageTests {
     Contract(ContractToTest),
-    NonContract(pkg::BuiltPackage),
+    NonContract(pkg::BuiltPackageDetails),
 }
 
 /// A built contract ready for test execution.
@@ -77,8 +77,8 @@ pub enum PackageTests {
 /// `tests_excluded` is the built pkg without the `--test` flag (i.e `forc build`).
 #[derive(Debug)]
 pub struct ContractToTest {
-    pub tests_included: pkg::BuiltPackage,
-    pub tests_excluded: pkg::BuiltPackage,
+    pub tests_included: pkg::BuiltPackageDetails,
+    pub tests_excluded: pkg::BuiltPackageDetails,
 }
 
 /// The set of options provided to the `test` function.
@@ -128,17 +128,13 @@ impl BuiltTests {
     /// is a `Contract` so that only that contract is re-built.
     ///
     /// If the `built` is a package, `PackageTests::from_built_pkg` is used.
-    pub(crate) fn from_built(built: Built, opts: Opts) -> anyhow::Result<BuiltTests> {
+    pub(crate) fn from_built(built: Built) -> anyhow::Result<BuiltTests> {
         let built = match built {
-            Built::Package(pkg) => BuiltTests::Package(PackageTests::from_built_pkg(*pkg, opts)?),
+            Built::Package(pkg) => BuiltTests::Package(PackageTests::from_built_pkg(*pkg)?),
             Built::Workspace(workspace) => {
                 let packages = workspace
                     .into_values()
-                    .map(|built_pkg| {
-                        let path = built_pkg.manifest_file.path();
-                        let patched_opts = opts.clone().patch_opts(path);
-                        PackageTests::from_built_pkg(built_pkg, patched_opts)
-                    })
+                    .map(|built_pkg| PackageTests::from_built_pkg(built_pkg))
                     .collect::<anyhow::Result<_>>()?;
                 BuiltTests::Workspace(packages)
             }
@@ -152,7 +148,7 @@ impl<'a> PackageTests {
     ///
     /// If this `PackageTests` is `PackageTests::Contract`, built package with tests included is
     /// returned.
-    pub(crate) fn built_pkg_with_tests(&'a self) -> &'a BuiltPackage {
+    pub(crate) fn built_pkg_details_with_tests(&'a self) -> &'a pkg::BuiltPackageDetails {
         match self {
             PackageTests::Contract(contract) => &contract.tests_included,
             PackageTests::NonContract(non_contract) => non_contract,
@@ -162,28 +158,26 @@ impl<'a> PackageTests {
     /// Construct a `PackageTests` from `BuiltPackage`.
     ///
     /// If the built package is a `Contract`, this will re-compile the package with tests disabled.
-    fn from_built_pkg(built_pkg: BuiltPackage, opts: Opts) -> anyhow::Result<PackageTests> {
-        let tree_type = &built_pkg.tree_type;
-        let package_test = match tree_type {
-            sway_core::language::parsed::TreeType::Contract => {
-                let mut build_opts_without_tests = opts.into_build_opts();
-                build_opts_without_tests.tests = false;
-                let pkg_without_tests =
-                    pkg::build_with_options(build_opts_without_tests)?.expect_pkg()?;
+    fn from_built_pkg(built_pkg: BuiltPackage) -> anyhow::Result<PackageTests> {
+        let package_test = match built_pkg {
+            BuiltPackage::BuiltContract(contract) => {
+                let tests_included_pkg = contract
+                    .with_tests
+                    .expect("expected to have a built package for contract without tests");
                 let contract_to_test = ContractToTest {
-                    tests_included: built_pkg,
-                    tests_excluded: pkg_without_tests,
+                    tests_included: tests_included_pkg,
+                    tests_excluded: contract.without_tests,
                 };
                 PackageTests::Contract(contract_to_test)
             }
-            _ => PackageTests::NonContract(built_pkg),
+            BuiltPackage::BuiltNonContract(non_contract) => PackageTests::NonContract(non_contract),
         };
         Ok(package_test)
     }
 
     /// Run all tests for this package and collect their results.
     pub(crate) fn run_tests(&self) -> anyhow::Result<TestedPackage> {
-        let pkg_with_tests = self.built_pkg_with_tests();
+        let pkg_with_tests = self.built_pkg_details_with_tests();
         // TODO: We can easily parallelise this, but let's wait until testing is stable first.
         let tests = pkg_with_tests
             .entries
@@ -272,15 +266,6 @@ impl Opts {
             tests: true,
         }
     }
-
-    /// Patch this set of test options, so that it will build the package at the given `path`.
-    pub(crate) fn patch_opts(self, path: &std::path::Path) -> Opts {
-        let mut opts = self;
-        let mut pkg_opts = opts.pkg;
-        pkg_opts.path = path.to_str().map(|path_str| path_str.to_string());
-        opts.pkg = pkg_opts;
-        opts
-    }
 }
 
 impl TestResult {
@@ -326,7 +311,7 @@ impl BuiltTests {
         };
         pkgs.iter()
             .map(|pkg| {
-                pkg.built_pkg_with_tests()
+                pkg.built_pkg_details_with_tests()
                     .entries
                     .iter()
                     .filter(|e| e.is_test())
@@ -343,19 +328,19 @@ impl BuiltTests {
 
 /// First builds the package or workspace, ready for execution.
 pub fn build(opts: Opts) -> anyhow::Result<BuiltTests> {
-    let build_opts = opts.clone().into_build_opts();
+    let build_opts = opts.into_build_opts();
     let built = pkg::build_with_options(build_opts)?;
-    let built_tests = BuiltTests::from_built(built, opts)?;
+    let built_tests = BuiltTests::from_built(built)?;
     Ok(built_tests)
 }
 
 /// Deploys the provided contract and returns an interpreter instance ready to be used in test
 /// executions with deployed contract.
-fn deploy_test_contract(built_pkg: BuiltPackage) -> anyhow::Result<TestSetup> {
+fn deploy_test_contract(built_pkg_details: pkg::BuiltPackageDetails) -> anyhow::Result<TestSetup> {
     // Obtain the contract id for deployment.
-    let mut storage_slots = built_pkg.storage_slots;
+    let mut storage_slots = built_pkg_details.storage_slots;
     storage_slots.sort();
-    let bytecode = built_pkg.bytecode;
+    let bytecode = built_pkg_details.bytecode;
     let contract = tx::Contract::from(bytecode.clone());
     let root = contract.root();
     let state_root = tx::Contract::initial_state_root(storage_slots.iter());

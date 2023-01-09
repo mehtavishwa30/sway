@@ -85,7 +85,21 @@ pub struct PinnedId(u64);
 
 /// The result of successfully compiling a package.
 #[derive(Debug, Clone)]
-pub struct BuiltPackage {
+pub enum BuiltPackage {
+    BuiltContract(BuiltContract),
+    BuiltNonContract(BuiltPackageDetails),
+}
+
+/// The result of successfully compiling a contract package.
+#[derive(Debug, Clone)]
+pub struct BuiltContract {
+    pub without_tests: BuiltPackageDetails,
+    pub with_tests: Option<BuiltPackageDetails>,
+}
+
+/// The details of a built package.
+#[derive(Debug, Clone)]
+pub struct BuiltPackageDetails {
     pub json_abi_program: fuels_types::ProgramABI,
     pub storage_slots: Vec<StorageSlot>,
     pub bytecode: Vec<u8>,
@@ -341,17 +355,58 @@ impl Edge {
     }
 }
 
-impl BuiltPackage {
+impl From<BuiltPackageDetails> for BuiltPackage {
+    fn from(value: BuiltPackageDetails) -> Self {
+        match value.tree_type {
+            TreeType::Contract => {
+                let built_contract = BuiltContract {
+                    without_tests: value,
+                    with_tests: None,
+                };
+                BuiltPackage::BuiltContract(built_contract)
+            }
+            _ => BuiltPackage::BuiltNonContract(value),
+        }
+    }
+}
+
+impl<'a> BuiltPackage {
+    /// Borrows the details of the `BuiltPackage`. If the package is a contract returns the details
+    /// of built package compiled without the tests.
+    pub fn details(&'a self) -> &'a BuiltPackageDetails {
+        match self {
+            BuiltPackage::BuiltContract(contract) => &contract.without_tests,
+            BuiltPackage::BuiltNonContract(non_contract_details) => non_contract_details,
+        }
+    }
+
+    /// Mutably borrows details of the `BuiltPackage`. If the package is a contract returns the details
+    /// of built package compiled without the tests.
+    pub fn details_mut(&'a mut self) -> &'a mut BuiltPackageDetails {
+        match self {
+            BuiltPackage::BuiltContract(contract) => &mut contract.without_tests,
+            BuiltPackage::BuiltNonContract(non_contract) => non_contract,
+        }
+    }
+
+    /// Returns `BuiltContract` if the given `BuiltPackage` is a `BuiltPackage::Contract`.
+    pub fn built_contract(self) -> Option<BuiltContract> {
+        match self {
+            BuiltPackage::BuiltContract(contract) => Some(contract),
+            BuiltPackage::BuiltNonContract(_) => None,
+        }
+    }
+
     /// Writes bytecode of the BuiltPackage to the given `path`.
     pub fn write_bytecode(&self, path: &Path) -> Result<()> {
-        fs::write(path, &self.bytecode)?;
+        fs::write(path, &self.details().bytecode)?;
         Ok(())
     }
 
     /// Writes debug_info (source_map) of the BuiltPackage to the given `path`.
     pub fn write_debug_info(&self, path: &Path) -> Result<()> {
         let source_map_json =
-            serde_json::to_vec(&self.source_map).expect("JSON serialization failed");
+            serde_json::to_vec(&self.details().source_map).expect("JSON serialization failed");
         fs::write(path, source_map_json)?;
         Ok(())
     }
@@ -371,22 +426,25 @@ impl BuiltPackage {
 
         self.write_bytecode(&bin_path)?;
 
-        if !self.json_abi_program.functions.is_empty() {
+        if !self.details().json_abi_program.functions.is_empty() {
             let json_abi_program_stem = format!("{}-abi", pkg_name);
             let json_abi_program_path = output_dir
                 .join(json_abi_program_stem)
                 .with_extension("json");
             let file = File::create(json_abi_program_path)?;
             let res = if minify.json_abi {
-                serde_json::to_writer(&file, &self.json_abi_program)
+                serde_json::to_writer(&file, &self.details().json_abi_program)
             } else {
-                serde_json::to_writer_pretty(&file, &self.json_abi_program)
+                serde_json::to_writer_pretty(&file, &self.details().json_abi_program)
             };
             res?
         }
-        info!("  Bytecode size is {} bytes.", self.bytecode.len());
+        info!(
+            "  Bytecode size is {} bytes.",
+            self.details().bytecode.len()
+        );
         // Additional ops required depending on the program type
-        match self.tree_type {
+        match self.details().tree_type {
             TreeType::Contract => {
                 // For contracts, emit a JSON file with all the initialized storage slots.
                 let json_storage_slots_stem = format!("{}-storage_slots", pkg_name);
@@ -395,16 +453,16 @@ impl BuiltPackage {
                     .with_extension("json");
                 let storage_slots_file = File::create(json_storage_slots_path)?;
                 let res = if minify.json_storage_slots {
-                    serde_json::to_writer(&storage_slots_file, &self.storage_slots)
+                    serde_json::to_writer(&storage_slots_file, &self.details().storage_slots)
                 } else {
-                    serde_json::to_writer_pretty(&storage_slots_file, &self.storage_slots)
+                    serde_json::to_writer_pretty(&storage_slots_file, &self.details().storage_slots)
                 };
 
                 res?;
             }
             TreeType::Predicate => {
                 // Get the root hash of the bytecode for predicates and store the result in a file in the output directory
-                let root = format!("0x{}", Contract::root_from_code(&self.bytecode));
+                let root = format!("0x{}", Contract::root_from_code(&self.details().bytecode));
                 let root_file_name = format!("{}{}", &pkg_name, SWAY_BIN_ROOT_SUFFIX);
                 let root_path = output_dir.join(root_file_name);
                 fs::write(root_path, &root)?;
@@ -412,7 +470,8 @@ impl BuiltPackage {
             }
             TreeType::Script => {
                 // hash the bytecode for scripts and store the result in a file in the output directory
-                let bytecode_hash = format!("0x{}", fuel_crypto::Hasher::hash(&self.bytecode));
+                let bytecode_hash =
+                    format!("0x{}", fuel_crypto::Hasher::hash(&self.details().bytecode));
                 let hash_file_name = format!("{}{}", &pkg_name, SWAY_BIN_HASH_SUFFIX);
                 let hash_path = output_dir.join(hash_file_name);
                 fs::write(hash_path, &bytecode_hash)?;
@@ -430,17 +489,9 @@ impl Built {
     pub fn into_members(self) -> Result<HashMap<String, BuiltPackage>> {
         match self {
             Built::Package(built_pkg) => {
-                Ok(std::iter::once((built_pkg.pkg_name.clone(), *built_pkg)).collect())
+                Ok(std::iter::once((built_pkg.details().pkg_name.clone(), *built_pkg)).collect())
             }
             Built::Workspace(built_workspace) => Ok(built_workspace),
-        }
-    }
-
-    /// Tries to retrieve the `Built` as a `BuiltPackage`, panics otherwise.
-    pub fn expect_pkg(self) -> Result<BuiltPackage> {
-        match self {
-            Built::Package(built_pkg) => Ok(*built_pkg),
-            Built::Workspace(_) => bail!("expected `Built` to be `Built::Package`"),
         }
     }
 }
@@ -2204,12 +2255,7 @@ pub fn dependency_namespace(
 
                 // Construct namespace with contract id
                 let contract_dep_constant_name = "CONTRACT_ID";
-                let contract_id_value = format!("0x{dep_contract_id}");
-                let contract_id_constant = ConfigTimeConstant {
-                    r#type: "b256".to_string(),
-                    value: contract_id_value,
-                    public: true,
-                };
+                let contract_id_constant = contract_id_constant(dep_contract_id);
                 constants.insert(contract_dep_constant_name.to_string(), contract_id_constant);
                 namespace::Module::default_with_constants(engines, constants)?
             }
@@ -2329,7 +2375,7 @@ pub fn compile(
     namespace: namespace::Module,
     engines: Engines<'_>,
     source_map: &mut SourceMap,
-) -> Result<(BuiltPackage, namespace::Root)> {
+) -> Result<(BuiltPackageDetails, namespace::Root)> {
     // Time the given expression and print the result if `build_config.time_phases` is true.
     macro_rules! time_expr {
         ($description:expr, $expression:expr) => {{
@@ -2406,7 +2452,7 @@ pub fn compile(
         Some(CompiledBytecode(bytes)) if bc_res.errors.is_empty() => {
             print_on_success(terse_mode, &pkg.name, &bc_res.warnings, &tree_type);
             let bytecode = bytes;
-            let built_package = BuiltPackage {
+            let built_details = BuiltPackageDetails {
                 json_abi_program,
                 storage_slots,
                 bytecode,
@@ -2417,7 +2463,8 @@ pub fn compile(
                 declaration_engine: engines.de().clone(),
                 manifest_file: manifest.clone(),
             };
-            Ok((built_package, namespace))
+
+            Ok((built_details, namespace))
         }
         _ => fail(&bc_res.warnings, &bc_res.errors),
     }
@@ -2571,11 +2618,22 @@ pub fn build_with_options(build_options: BuildOpts) -> Result<Built> {
     }
 }
 
+/// Returns `ConfigTimeConstant` for contract ids.
+fn contract_id_constant(contract_id: ContractId) -> ConfigTimeConstant {
+    // Construct namespace with contract id
+    let contract_id_value = format!("0x{contract_id}");
+    ConfigTimeConstant {
+        r#type: "b256".to_string(),
+        value: contract_id_value,
+        public: true,
+    }
+}
+
 /// Returns the ContractId of a built_package contract with specified `salt`.
 fn contract_id(built_package: &BuiltPackage, salt: &fuel_tx::Salt) -> ContractId {
     // Construct the contract ID
-    let contract = Contract::from(built_package.bytecode.clone());
-    let mut storage_slots = built_package.storage_slots.clone();
+    let contract = Contract::from(built_package.details().bytecode.clone());
+    let mut storage_slots = built_package.details().storage_slots.clone();
     storage_slots.sort();
     let state_root = Contract::initial_state_root(storage_slots.iter());
     contract.id(salt, &contract.root(), &state_root)
@@ -2637,7 +2695,30 @@ pub fn build(
         let mut source_map = SourceMap::new();
         let pkg = &plan.graph()[node];
         let manifest = &plan.manifest_map()[&pkg.id()];
-        let constants = manifest.config_time_constants();
+        let mut constants = manifest.config_time_constants();
+        // If tests are included, first compile the package without tests to get contract id
+        let built_pkg_without_tests =
+            if profile.include_tests && matches!(manifest.program_type(), Ok(TreeType::Contract)) {
+                info!("  Determining contract id");
+                let profile_without_tests = BuildProfile {
+                    include_tests: false,
+                    ..profile.clone()
+                };
+                let output = HashSet::from([node]);
+                build(plan, &profile_without_tests, &output)?
+                    .into_iter()
+                    .next()
+                    .map(|(_, built_pkg)| built_pkg)
+            } else {
+                None
+            };
+        let contract_id_constant = built_pkg_without_tests
+            .as_ref()
+            .map(|pkg| contract_id(pkg, &fuel_tx::Salt::zeroed()))
+            .map(contract_id_constant);
+        if let Some(contract_id_constant) = contract_id_constant {
+            constants.insert("CONTRACT_ID".to_string(), contract_id_constant.clone());
+        }
         let dep_namespace = match dependency_namespace(
             &lib_namespace_map,
             &compiled_contract_deps,
@@ -2660,22 +2741,39 @@ pub fn build(
             engines,
             &mut source_map,
         )?;
-        let (mut built_package, namespace) = res;
+        let (built_pkg_details, namespace) = res;
+        let tree_type = &built_pkg_details.tree_type;
+        let mut built_pkg = match tree_type {
+            TreeType::Contract => {
+                let (without_tests, with_tests) = match built_pkg_without_tests {
+                    Some(without_tests) => {
+                        (without_tests.details().clone(), Some(built_pkg_details))
+                    }
+                    None => (built_pkg_details, None),
+                };
+                let built_contract = BuiltContract {
+                    without_tests,
+                    with_tests,
+                };
+                BuiltPackage::BuiltContract(built_contract)
+            }
+            _ => BuiltPackage::BuiltNonContract(built_pkg_details),
+        };
         // If the current node is a contract dependency, collect the contract_id
         if plan
             .graph()
             .edges_directed(node, Direction::Incoming)
             .any(|e| matches!(e.weight().kind, DepKind::Contract { .. }))
         {
-            compiled_contract_deps.insert(node, built_package.clone());
+            compiled_contract_deps.insert(node, built_pkg.clone());
         }
-        if let TreeType::Library { .. } = built_package.tree_type {
+        if let TreeType::Library { .. } = built_pkg.details().tree_type {
             lib_namespace_map.insert(node, namespace.into());
         }
         source_map.insert_dependency(manifest.dir());
-        standardize_json_abi_types(&mut built_package.json_abi_program);
+        standardize_json_abi_types(&mut built_pkg.details_mut().json_abi_program);
         if outputs.contains(&node) {
-            built_packages.push((node, built_package));
+            built_packages.push((node, built_pkg));
         }
     }
 
