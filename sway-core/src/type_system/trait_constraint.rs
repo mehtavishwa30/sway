@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{fmt, hash::Hash};
 
 use sway_error::error::CompileError;
 use sway_types::{Span, Spanned};
@@ -16,6 +16,28 @@ use crate::{
 pub struct TraitConstraint {
     pub(crate) trait_name: CallPath,
     pub(crate) type_arguments: Vec<TypeArgument>,
+}
+
+impl DisplayWithEngines for TraitConstraint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>, engines: Engines<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            self.trait_name,
+            if self.type_arguments.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<{}>",
+                    self.type_arguments
+                        .iter()
+                        .map(|x| engines.help_out(x).to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+        )
+    }
 }
 
 impl HashWithEngines for TraitConstraint {
@@ -224,10 +246,12 @@ impl TraitConstraint {
                     span: trait_name.span(),
                 })
             }
-            _ => errors.push(CompileError::TraitNotFound {
-                name: trait_name.to_string(),
-                span: trait_name.span(),
-            }),
+            _ => {
+                errors.push(CompileError::TraitNotFound {
+                    name: trait_name.to_string(),
+                    span: trait_name.span(),
+                });
+            }
         }
 
         ok((), warnings, errors)

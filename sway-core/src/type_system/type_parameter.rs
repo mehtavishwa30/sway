@@ -79,7 +79,24 @@ impl Spanned for TypeParameter {
 
 impl DisplayWithEngines for TypeParameter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>, engines: Engines<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.name_ident, engines.help_out(self.type_id))
+        // write!(f, "{}: {}", self.name_ident, engines.help_out(self.type_id))
+        write!(
+            f,
+            "{}{}",
+            engines.help_out(self.type_id),
+            if self.trait_constraints.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    ": {}",
+                    self.trait_constraints
+                        .iter()
+                        .map(|x| engines.help_out(x).to_string())
+                        .collect::<Vec<_>>()
+                        .join(" + ")
+                )
+            }
+        )
     }
 }
 
@@ -285,6 +302,8 @@ fn handle_trait(
     let mut original_method_ids: BTreeMap<Ident, DeclarationId> = BTreeMap::new();
     let mut impld_method_ids: BTreeMap<Ident, DeclarationId> = BTreeMap::new();
 
+    println!("ctx.namespace.mod_path: {:?}", ctx.namespace.mod_path);
+    println!("trait_name: {}", trait_name);
     match ctx
         .namespace
         .resolve_call_path(trait_name)
@@ -327,10 +346,12 @@ fn handle_trait(
                 impld_method_ids.extend(supertrait_impld_method_ids);
             }
         }
-        _ => errors.push(CompileError::TraitNotFound {
-            name: trait_name.to_string(),
-            span: trait_name.span(),
-        }),
+        _ => {
+            errors.push(CompileError::TraitNotFound {
+                name: trait_name.to_string(),
+                span: trait_name.span(),
+            });
+        }
     }
 
     if errors.is_empty() {

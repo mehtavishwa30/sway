@@ -107,10 +107,12 @@ pub(crate) fn insert_supertraits_into_namespace(
                     span: supertrait.name.span().clone(),
                 })
             }
-            _ => errors.push(CompileError::TraitNotFound {
-                name: supertrait.name.to_string(),
-                span: supertrait.name.span(),
-            }),
+            _ => {
+                errors.push(CompileError::TraitNotFound {
+                    name: supertrait.name.to_string(),
+                    span: supertrait.name.span(),
+                });
+            }
         }
     }
 

@@ -39,6 +39,14 @@ impl ty::TyImplTrait {
         let mut ctx = ctx.by_ref().scoped(&mut impl_namespace).allow_functions();
 
         // type check the type parameters which also inserts them into the namespace
+        // println!(
+        //     "impl_type_parameters: [{}]",
+        //     impl_type_parameters
+        //         .iter()
+        //         .map(|x| engines.help_out(x).to_string())
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
         let mut new_impl_type_parameters = vec![];
         for type_parameter in impl_type_parameters.into_iter() {
             new_impl_type_parameters.push(check!(
@@ -48,6 +56,14 @@ impl ty::TyImplTrait {
                 errors
             ));
         }
+        // println!(
+        //     "new_impl_type_parameters: [{}]",
+        //     new_impl_type_parameters
+        //         .iter()
+        //         .map(|x| engines.help_out(x).to_string())
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
 
         // resolve the types of the trait type arguments
         for type_arg in trait_type_arguments.iter_mut() {
@@ -683,6 +699,15 @@ fn type_check_trait_implementation(
             warnings,
             errors
         );
+        // println!(
+        //     "impl_method.type_parameters: [{}]",
+        //     impl_method
+        //         .type_parameters
+        //         .iter()
+        //         .map(|x| engines.help_out(x).to_string())
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
 
         // Ensure that there aren't multiple definitions of this function impl'd
         if impld_method_ids.contains_key(&impl_method.name.clone()) {
@@ -836,7 +861,7 @@ fn type_check_trait_implementation(
             continue;
         }
 
-        // if this method uses a type parameter from its parent's impl type
+        // If this method uses a type parameter from its parent's impl type
         // parameters that is not constrained by the type that we are
         // implementing for, then we need to add that type parameter to the
         // method's type parameters so that in-line monomorphization can
@@ -858,6 +883,14 @@ fn type_check_trait_implementation(
             .cloned()
             .map(|x| WithEngines::new(x, engines))
             .collect();
+        // println!(
+        //     "unconstrained_type_parameters_in_this_function: [{}]",
+        //     unconstrained_type_parameters_in_this_function
+        //         .iter()
+        //         .map(|x| x.to_string())
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
         let unconstrained_type_parameters_in_the_type: HashSet<WithEngines<'_, TypeParameter>> =
             ctx.self_type()
                 .unconstrained_type_parameters(engines, impl_type_parameters)
@@ -865,13 +898,29 @@ fn type_check_trait_implementation(
                 .cloned()
                 .map(|x| WithEngines::new(x, engines))
                 .collect::<HashSet<_>>();
+        // println!(
+        //     "unconstrained_type_parameters_in_the_type: [{}]",
+        //     unconstrained_type_parameters_in_the_type
+        //         .iter()
+        //         .map(|x| x.to_string())
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
         let mut unconstrained_type_parameters_to_be_added =
-            unconstrained_type_parameters_in_this_function
-                .difference(&unconstrained_type_parameters_in_the_type)
+            unconstrained_type_parameters_in_the_type
+                .difference(&unconstrained_type_parameters_in_this_function)
                 .cloned()
                 .into_iter()
                 .map(|x| x.thing)
                 .collect::<Vec<_>>();
+        // println!(
+        //     "unconstrained_type_parameters_to_be_added: [{}]",
+        //     unconstrained_type_parameters_to_be_added
+        //         .iter()
+        //         .map(|x| engines.help_out(x).to_string())
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
         impl_method
             .type_parameters
             .append(&mut unconstrained_type_parameters_to_be_added);
@@ -1123,10 +1172,12 @@ fn handle_supertraits(
                     span: supertrait.name.span().clone(),
                 })
             }
-            _ => errors.push(CompileError::TraitNotFound {
-                name: supertrait.name.to_string(),
-                span: supertrait.name.span(),
-            }),
+            _ => {
+                errors.push(CompileError::TraitNotFound {
+                    name: supertrait.name.to_string(),
+                    span: supertrait.name.span(),
+                });
+            }
         }
     }
 
