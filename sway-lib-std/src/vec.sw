@@ -424,41 +424,6 @@ impl<T> Vec<T> {
         index_ptr.write::<T>(value);
     }
 
-    /// Returns `true` if the vector contains an element with the given `value`.
-    ///
-    /// This operation is O(n).
-    ///
-    /// ### Arguments
-    ///
-    /// * value - The value to check
-    ///
-    /// ### Examples
-    ///
-    /// ```sway
-    /// use std::vec::Vec;
-    ///
-    /// let vec = Vec::new();
-    /// vec.push(1);
-    /// vec.push(2);
-    ///
-    /// assert(vec.contains(2));
-    /// assert(!vec.contains(3));
-    /// ```
-    pub fn contains<T>(ref mut self, value: T) -> bool
-    where
-        T: Eq
-    {
-        let mut i = 0;
-        while i < self.len {
-            let index_ptr = self.buf.ptr.add::<T>(i);
-            if value == index_ptr.read::<T>() {
-                return true;
-            }
-            i += 1;
-        }
-        return false;
-    }
-
     /// Moves all elements of `other` into `self`, leaving `other` empty.
     ///
     /// ### Arguments
@@ -470,41 +435,35 @@ impl<T> Vec<T> {
     /// ```sway
     /// use std::vec::Vec;
     ///
-    /// let a = Vec::new();
-    /// a.push(1);
-    /// a.push(2);
+    /// let mut vec = Vec::new();
+    /// vec.push(1);
+    /// vec.push(2);
     ///
-    /// let b = Vec::new();
-    /// b.push(3);
-    /// b.push(4);
+    /// let mut vec2 = Vec::new();
+    /// vec2.push(3);
+    /// vec2.push(4);
     ///
-    /// a.append(b);
+    /// vec.append(vec2);
     ///
-    /// let c = Vec::new();
-    /// c.push(1);
-    /// c.push(2);
-    /// c.push(3);
-    /// c.push(4);
-    ///
-    /// assert(a.get(0).unwrap() == c.get(0).unwrap());
-    /// assert(a.get(1).unwrap() == c.get(1).unwrap());
-    /// assert(a.get(2).unwrap() == c.get(2).unwrap());
-    /// assert(a.get(3).unwrap() == c.get(3).unwrap());
+    /// assert(vec.get(0).unwrap() == 1);
+    /// assert(vec.get(1).unwrap() == 2);
+    /// assert(vec.get(2).unwrap() == 3);
+    /// assert(vec.get(3).unwrap() == 4);
     /// ```
     pub fn append(ref mut self, ref other: Vec<T>) {
         let both_len = self.len + other.len;
         let other_start = self.len;
 
         // reallocate with combined capacity, write `other`, set buffer capacity
-        self.buf.ptr = realloc::<T>(self.ptr, self.cap, both_len);
-        self.buf.ptr.add::<T>(other_start).write::<Vec<T>>(other);
+        self.buf.ptr = realloc::<T>(self.buf.ptr(), self.buf.capacity(), both_len);
+        self.buf.ptr().add::<T>(other_start).write::<Vec<T>>(other);
 
         // set capacity and length
         self.buf.cap = both_len;
         self.len = both_len;
 
         // clear `other`
-        other.clear();
+        other.len = 0;
     }
 
     /// Splits the collection into two at the given index.
@@ -530,26 +489,21 @@ impl<T> Vec<T> {
     /// vec.push(3);
     /// let vec2 = vec.split_off(1);
     ///
-    /// assert(vec[0] == 1);
-    /// assert(vec2[0] == 2);
-    /// assert(vec2[1] == 3);
+    /// assert(vec.get(0).unwrap() == 1);
+    /// assert(vec2.get(0).unwrap() == 2);
+    /// assert(vec2.get(0).unwrap() == 3);
     /// ```
     pub fn split_off(ref mut self, at: u64) -> Vec<T> {
         assert(self.len >= at);
 
-        // allocate the second vector
-        let second_len = self.len - at;
-        let mut second_vec = Vec::with_capacity(second_len);
+        let split_len = self.len - at;
+        let mut split_vec = Self { buf: RawVec::with_capacity(split_len), len: split_len };
 
-        // copy `self[at..]` to second vector
-        second_vec.len = second_len;
-        self.buf.ptr.add::<T>(at).copy_to::<T>(second_vec.buf.ptr, second_len);
-        second_vec.len = second_len;
+        self.buf.ptr().add::<T>(at).copy_to::<T>(split_vec.buf.ptr(), split_len);
 
-        // remove `self[at..]` from self
         self.len = at - 1;
 
-        second_vec
+        split_vec
     }
 
     /// Divides one slice into two at an index.
@@ -569,39 +523,36 @@ impl<T> Vec<T> {
     /// ### Examples
     ///
     /// ```sway
-    /// let v = Vec::new();
-    /// v.push(1);
-    /// v.push(2);
-    /// v.push(3);
-    /// v.push(4);
+    /// let mut vec = Vec::new();
+    /// vec.push(1);
+    /// vec.push(2);
+    /// vec.push(3);
+    /// vec.push(4);
     ///
-    /// let (left, right) = v.split_at(2);
+    /// let (left, right) = vec.split_at(2);
     ///
-    /// assert(left[0] == 1);
-    /// assert(left[1] == 2);
-    /// assert(right[0] == 3);
-    /// assert(right[1] == 4);
+    /// assert(left.get(0).unwrap() == 1);
+    /// assert(left.get(1).unwrap() == 2);
+    ///
+    /// assert(right.get(0).unwrap() == 3);
+    /// assert(right.get(1).unwrap() == 4);
     /// ```
     pub fn split_at(self, mid: u64) -> (Vec<T>, Vec<T>) {
         assert(self.len >= mid);
 
-        // get lengths
         let left_len = mid;
         let right_len = self.len - mid;
 
-        // allocate `left` and `right`
-        let mut left = Vec::with_capacity::<T>(left_len);
-        let mut right = Vec::with_capacity::<T>(right_len);
+        let mut left_vec = Self { buf: RawVec::with_capacity(left_len), len: left_len };
+        let mut right_vec = Self { buf: RawVec::with_capacity(right_len), len: right_len };
 
-        // copy `self[..mid]` to `left`, `self[mid..]` to `right`
-        self.buf.ptr.copy_to::<T>(left.buf.ptr, left_len);
-        self.buf.ptr.add::<T>(mid).copy_to::<T>(right.buf.ptr, right_len);
+        self.buf.ptr().copy_to::<T>(left_vec.buf.ptr(), left_len);
+        self.buf.ptr().add::<T>(mid).copy_to::<T>(right_vec.buf.ptr(), right_len);
 
-        // assign lengths
-        left.len = left_len;
-        right.len = right_len;
+        left_vec.len = left_len;
+        right_vec.len = right_len;
 
-        (left, right)
+        (left_vec, right_vec)
     }
 
     /// Returns the first element of the vector, or `None` if it is empty.
@@ -609,16 +560,214 @@ impl<T> Vec<T> {
     /// ### Examples
     ///
     /// ```sway
-    /// let v = Vec::new();
+    /// let mut vec = Vec::new();
+    /// vec.push(1);
+    /// vec.push(2);
+    ///
+    /// let vec2 = Vec::new();
+    ///
+    /// assert(vec.first().unwrap() == 1);
+    /// assert(vec2.first().is_none());
+    /// ```
+    pub fn first(self) -> Option<T> {
+        match self.len {
+            0 => Option::None::<T>(),
+            _ => Option::Some(self.buf.ptr().read::<T>()),
+        }
+    }
+
+    /// Returns the last element of the vector, or `None` if it is empty.
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let mut vec = Vec::new();
+    /// vec.push(1); 
+    /// vec.push(2);
+    ///
+    /// let vec2 = Vec::new();
+    ///
+    /// assert(vec.last().unwrap() == 2);
+    /// assert(vec2.last().is_none());
+    /// ```
+    pub fn last(self) -> Option<T> {
+        match self.len {
+            0 => Option::None,
+            n => Option::Some(self.buf.ptr().add::<T>(n - 1).read::<T>()),
+        }
+    }
+
+    /// Reverses the order of elements in the vector, in place.
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let mut v = Vec::new();
     /// v.push(1);
     /// v.push(2);
+    /// v.push(3);
+    /// v.reverse();
     ///
-    /// let w = Vec::new();
-    ///
-    /// assert(v.first().unwrap() == 1);
-    /// assert(w.first().is_none());
+    /// assert(v.get(0.unwrap() == 3);
+    /// assert(v.get(1).unwrap() == 2);
+    /// assert(v.get(2).unwrap() == 1);
     /// ```
-    pub fn first(self) -> Option<T> {}
+    pub fn reverse(ref mut self) {
+        let len = self.len;
+
+        if len >= 2 {
+            let mut i = 0;
+            while i < len {
+                let element1_ptr = self.buf.ptr().add::<T>(i);
+                let element2_ptr = self.buf.ptr().add::<T>(len - i - 1);
+
+                let element1_value: T = element1_ptr.read::<T>();
+                element2_ptr.copy_to::<T>(element1_ptr, 1);
+                element2_ptr.write::<T>(element1_value);
+            }
+        }
+    }
+
+    /// Fills `self` by with elements by cloning `value`.
+    ///
+    /// ### Arguments
+    ///
+    /// * value - Value to copy to each element of the vector
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let mut vec = Vec::new();
+    /// vec.push(0);
+    /// vec.push(0);
+    /// vec.push(0);
+    ///
+    /// vec.fill(1);
+    ///
+    /// assert(vec.get(0).unwrap() == 1);
+    /// assert(vec.get(1).unwrap() == 1);
+    /// assert(vec.get(2).unwrap() == 1);
+    /// ```
+    pub fn fill(ref mut self, value: T) {
+        let mut i = 0;
+        while i < self.len {
+            self.buf.ptr().add::<T>(i).write::<T>(value);
+        }
+    }
+
+    /// Returns `true` if the vector contains an element with the given `value`.
+    ///
+    /// This operation is O(n).
+    ///
+    /// ### Arguments
+    ///
+    /// * value - The value to check
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// use std::vec::Vec;
+    ///
+    /// let vec = Vec::new();
+    /// vec.push(1);
+    /// vec.push(2);
+    ///
+    /// assert(vec.contains(2));
+    /// assert(!vec.contains(3));
+    /// ```
+    // TODO: is this valid? the second generic type may allow checking of different types.
+    pub fn contains<E>(ref mut self, value: E) -> bool
+    where
+        E: Eq
+    {
+        let mut i = 0;
+        while i < self.len {
+            let index_ptr = self.buf.ptr().add::<E>(i);
+            if value == index_ptr.read::<E>() {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+
+    /// Resizes the `Vec` in place so that `len` is equal to `new_len`.
+    ///
+    /// If `new_len` is greater than `len`, the `Vec` is extended by the difference, with each
+    /// additional slot filled with `value`. If the `new_len` is greater than the capacity, it is
+    /// reallocated on the heap. If `new_len` is less than `len`, the `Vec` is simply truncated.
+    ///
+    /// ### Arguments
+    ///
+    /// new_len - The new length to expand or truncate to
+    /// value - The value to fill into new slots if the `new_len` is greater than the current length
+    ///
+    /// ### Examples
+    ///
+    /// ```sway
+    /// let vec = Vec::new();
+    /// vec.push(0);
+    /// vec.fill(3, 1);
+    ///
+    /// let vec2 = Vec::new();
+    /// vec2.push(1);
+    /// vec2.push(2);
+    /// vec.fill(1, 3);
+    ///
+    /// assert(vec.len() == 3);
+    /// assert(vec.get(0).unwrap() == 0);
+    /// assert(vec.get(1).unwrap() == 1);
+    /// assert(vec.get(2).unwrap() == 1);
+    ///
+    /// assert(vec2.len() == 1);
+    /// assert(vec2.get(0).unwrwap() == 1);
+    /// ```
+    pub fn resize(ref mut self, new_len: u64, value: T) {
+        let len = self.len;
+
+        if new_len <= len {
+            self.len = new_len;
+            return;
+        }
+        
+        if new_len > self.buf.cap {
+            // need to reallocate
+            self.buf.ptr = realloc::<T>(self.buf.ptr, self.buf.cap, new_len);
+            self.buf.cap = new_len;
+        }
+
+        let mut i = len;
+        while i < new_len {
+            self.buf.ptr().add::<T>(i).write::<T>(value);
+        }
+
+        self.len = new_len;
+    }
+}
+
+impl<T> Vec<T> {
+    /// Insertion sort algorithm.
+    ///
+    /// - Worst case O(n^2) comparisons and swaps
+    /// - Best case O(n) comparisons, O(1) swaps
+    /// - Average case O(n^2) comparisons and swaps
+    /// - Worst space complexity O(n) total, O(1) auxillary
+    // TODO: this is blocked by the trait constraint issue: https://github.com/FuelLabs/sway/pull/3621
+    fn insertion_sort(ref mut self) {}
+    // TODO: this will be used in the `sort` method when the lenth of the vector is less than `10`.
+    // fn insertion_sort<T>(ref mut self) where T: Eq {
+    //     let len = self.len();
+    //     if len >= 2 {
+    //         let mut i = 0;
+    //         while i < len {
+    //             let mut j = i;
+    //             while j > 0 && self.get(j).unwrap() < self.get(j - 1).unwrap() {
+    //                 self.swap(j, j - 1);
+    //                 j -= 1;
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 impl<T> AsRawSlice for Vec<T> {
