@@ -167,8 +167,8 @@ impl Session {
             let parsed_res = CompileResult::new(Some(parsed), warnings.clone(), errors.clone());
             let ast_res = CompileResult::new(typed, warnings, errors);
 
-            let parse_program = self.compile_res_to_parse_program(&parsed_res)?;
-            let typed_program = self.compile_res_to_typed_program(&ast_res)?;
+            let parse_program = self.compile_res_to_parse_program(&parsed_res, uri)?;
+            let typed_program = self.compile_res_to_typed_program(&ast_res, uri)?;
 
             // The final element in the results is the main program.
             if i == results_len - 1 {
@@ -189,8 +189,12 @@ impl Session {
                 self.save_parse_program(parse_program.to_owned().clone());
                 self.save_typed_program(typed_program.to_owned().clone());
 
-                diagnostics =
-                    capabilities::diagnostic::get_diagnostics(&ast_res.warnings, &ast_res.errors);
+                let tokens = self.token_map.tokens_for_file(uri);
+                diagnostics = capabilities::diagnostic::get_diagnostics(
+                    tokens,
+                    &ast_res.warnings,
+                    &ast_res.errors,
+                );
             } else {
                 // Collect tokens from dependencies and the standard library prelude.
                 let dependency = Dependency::new(&self.token_map);
@@ -360,9 +364,12 @@ impl Session {
     fn compile_res_to_parse_program<'a>(
         &'a self,
         parsed_result: &'a CompileResult<ParseProgram>,
+        uri: &Url,
     ) -> Result<&'a ParseProgram, LanguageServerError> {
         parsed_result.value.as_ref().ok_or_else(|| {
+            let tokens = self.token_map.tokens_for_file(uri);
             let diagnostics = capabilities::diagnostic::get_diagnostics(
+                tokens,
                 &parsed_result.warnings,
                 &parsed_result.errors,
             );
@@ -374,16 +381,18 @@ impl Session {
     fn compile_res_to_typed_program<'a>(
         &'a self,
         ast_res: &'a CompileResult<ty::TyProgram>,
+        uri: &Url,
     ) -> Result<&'a ty::TyProgram, LanguageServerError> {
-        ast_res
-            .value
-            .as_ref()
-            .ok_or(LanguageServerError::FailedToParse {
+        ast_res.value.as_ref().ok_or({
+            let tokens = self.token_map.tokens_for_file(uri);
+            LanguageServerError::FailedToParse {
                 diagnostics: capabilities::diagnostic::get_diagnostics(
+                    tokens,
                     &ast_res.warnings,
                     &ast_res.errors,
                 ),
-            })
+            }
+        })
     }
 
     /// Create runnables if the `TyProgramKind` of the `TyProgram` is a script.
