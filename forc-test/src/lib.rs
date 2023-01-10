@@ -134,7 +134,7 @@ impl BuiltTests {
             Built::Workspace(workspace) => {
                 let packages = workspace
                     .into_values()
-                    .map(|built_pkg| PackageTests::from_built_pkg(built_pkg))
+                    .map(PackageTests::from_built_pkg)
                     .collect::<anyhow::Result<_>>()?;
                 BuiltTests::Workspace(packages)
             }

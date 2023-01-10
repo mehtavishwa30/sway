@@ -3,7 +3,7 @@ use forc_pkg::{self as pkg, fuel_core_not_running, PackageManifestFile};
 use fuel_gql_client::client::FuelClient;
 use fuel_tx::{ContractId, Transaction, TransactionBuilder, UniqueIdentifier};
 use futures::TryFutureExt;
-use pkg::BuiltPackage;
+use pkg::BuiltPackageDetails;
 use std::time::Duration;
 use std::{path::PathBuf, str::FromStr};
 use sway_core::language::parsed::TreeType;
@@ -41,7 +41,7 @@ pub async fn run(command: RunCommand) -> Result<Vec<RanScript>> {
             .check_program_type(vec![TreeType::Script])
             .is_ok()
         {
-            let pkg_receipts = run_pkg(&command, &member_manifest, &built_pkg).await?;
+            let pkg_receipts = run_pkg(&command, &member_manifest, built_pkg.details()).await?;
             receipts.push(pkg_receipts);
         }
     }
@@ -52,7 +52,7 @@ pub async fn run(command: RunCommand) -> Result<Vec<RanScript>> {
 pub async fn run_pkg(
     command: &RunCommand,
     manifest: &PackageManifestFile,
-    compiled: &BuiltPackage,
+    compiled: &BuiltPackageDetails,
 ) -> Result<RanScript> {
     let input_data = command.data.as_deref().unwrap_or("");
     let data = format_hex_data(input_data);

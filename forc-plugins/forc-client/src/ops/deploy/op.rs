@@ -7,7 +7,7 @@ use fuel_gql_client::{
     fuel_vm::prelude::*,
 };
 use futures::FutureExt;
-use pkg::BuiltPackage;
+use pkg::BuiltPackageDetails;
 use std::path::PathBuf;
 use std::time::Duration;
 use sway_core::language::parsed::TreeType;
@@ -43,7 +43,7 @@ pub async fn deploy(command: DeployCommand) -> Result<Vec<DeployedContract>> {
             .check_program_type(vec![TreeType::Contract])
             .is_ok()
         {
-            let contract_id = deploy_pkg(&command, &member_manifest, &built_pkg).await?;
+            let contract_id = deploy_pkg(&command, &member_manifest, built_pkg.details()).await?;
             contract_ids.push(contract_id);
         }
     }
@@ -54,7 +54,7 @@ pub async fn deploy(command: DeployCommand) -> Result<Vec<DeployedContract>> {
 pub async fn deploy_pkg(
     command: &DeployCommand,
     manifest: &PackageManifestFile,
-    compiled: &BuiltPackage,
+    compiled: &BuiltPackageDetails,
 ) -> Result<DeployedContract> {
     let node_url = match &manifest.network {
         Some(network) => &network.url,

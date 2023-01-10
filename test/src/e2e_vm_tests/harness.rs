@@ -135,7 +135,7 @@ pub(crate) fn runs_in_vm(
         ..ConsensusParameters::DEFAULT
     };
 
-    let tx = TransactionBuilder::script(script.bytecode.clone(), script_data)
+    let tx = TransactionBuilder::script(script.details().bytecode.clone(), script_data)
         .add_unsigned_coin_input(rng.gen(), rng.gen(), 1, Default::default(), rng.gen(), 0)
         .gas_limit(fuel_tx::ConsensusParameters::DEFAULT.max_gas_per_tx)
         .maturity(maturity)
@@ -240,7 +240,7 @@ pub(crate) fn test_json_abi(file_name: &str, built_package: &BuiltPackage) -> Re
 
 fn emit_json_abi(file_name: &str, built_package: &BuiltPackage) -> Result<()> {
     tracing::info!("ABI gen {} ...", file_name.bold());
-    let json_abi = serde_json::json!(built_package.json_abi_program);
+    let json_abi = serde_json::json!(built_package.details().json_abi_program);
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let file = std::fs::File::create(format!(
         "{}/src/e2e_vm_tests/test_programs/{}/{}",
@@ -280,7 +280,7 @@ pub(crate) fn test_json_storage_slots(file_name: &str, built_package: &BuiltPack
 
 fn emit_json_storage_slots(file_name: &str, built_package: &BuiltPackage) -> Result<()> {
     tracing::info!("Storage slots JSON gen {} ...", file_name.bold());
-    let json_storage_slots = serde_json::json!(built_package.storage_slots);
+    let json_storage_slots = serde_json::json!(built_package.details().storage_slots);
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let file = std::fs::File::create(format!(
         "{}/src/e2e_vm_tests/test_programs/{}/{}",
