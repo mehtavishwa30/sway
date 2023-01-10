@@ -4,11 +4,11 @@ use forc_pkg as pkg;
 use fuel_tx as tx;
 use fuel_vm::{self as vm, prelude::Opcode};
 use pkg::{Built, BuiltPackage};
-use rand::{distributions::Standard, prelude::Distribution, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use sway_core::{language::ty::TyFunctionDeclaration, transform::AttributeKind};
 use sway_types::{Span, Spanned};
-use tx::{AssetId, TxPointer, UtxoId};
-use vm::prelude::SecretKey;
+
+const TX_RNG_SEED: u64 = 0x7E57u64;
 
 /// The result of a `forc test` invocation.
 #[derive(Debug)]
@@ -102,18 +102,6 @@ pub struct Opts {
     pub time_phases: bool,
 }
 
-/// The required common metadata for building a transaction to deploy a contract or run a test.
-#[derive(Debug)]
-struct TxMetadata {
-    secret_key: SecretKey,
-    utxo_id: UtxoId,
-    amount: u64,
-    asset_id: AssetId,
-    tx_pointer: TxPointer,
-    maturity: u64,
-    block_height: tx::Word,
-}
-
 /// The storage and the contract id (if a contract is being tested) for a test.
 #[derive(Debug)]
 struct TestSetup {
@@ -123,11 +111,6 @@ struct TestSetup {
 
 impl BuiltTests {
     /// Constructs a `PackageTests` from `Built`.
-    ///
-    /// If the `built` is a workspace, `opts` is patched for the members of the workspace that
-    /// is a `Contract` so that only that contract is re-built.
-    ///
-    /// If the `built` is a package, `PackageTests::from_built_pkg` is used.
     pub(crate) fn from_built(built: Built) -> anyhow::Result<BuiltTests> {
         let built = match built {
             Built::Package(pkg) => BuiltTests::Package(PackageTests::from_built_pkg(*pkg)?),
@@ -156,8 +139,6 @@ impl<'a> PackageTests {
     }
 
     /// Construct a `PackageTests` from `BuiltPackage`.
-    ///
-    /// If the built package is a `Contract`, this will re-compile the package with tests disabled.
     fn from_built_pkg(built_pkg: BuiltPackage) -> anyhow::Result<PackageTests> {
         let package_test = match built_pkg {
             BuiltPackage::BuiltContract(contract) => {
@@ -230,23 +211,6 @@ impl<'a> PackageTests {
                 storage: vm::storage::MemoryStorage::default(),
                 contract_id: None,
             }),
-        }
-    }
-}
-
-impl Distribution<TxMetadata> for Standard {
-    /// Samples a random sample for `TxMetadata` which contains both random and constant variables.
-    /// For random variables a random sampling is done. For constant fields a constant value that
-    /// can be used directly with `TransactionBuilder` (for test transactions) is set.
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> TxMetadata {
-        TxMetadata {
-            secret_key: rng.gen(),
-            utxo_id: rng.gen(),
-            amount: 1,
-            asset_id: rng.gen(),
-            tx_pointer: rng.gen(),
-            maturity: 1,
-            block_height: (u32::MAX >> 1) as u64,
         }
     }
 }
@@ -358,21 +322,20 @@ fn deploy_test_contract(built_pkg_details: pkg::BuiltPackageDetails) -> anyhow::
     let mut interpreter = vm::interpreter::Interpreter::with_storage(storage, params);
 
     // Create the deployment transaction.
-    let mut rng = rand::rngs::StdRng::seed_from_u64(0x7E57u64);
-    let metadata: TxMetadata = rng.gen();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(TX_RNG_SEED);
+    let secret_key = rng.gen();
+    let utxo_id = rng.gen();
+    let amount = 1;
+    let asset_id = rng.gen();
+    let tx_pointer = rng.gen();
+    let maturity = 1;
+    let block_height = (u32::MAX >> 1) as u64;
 
     let tx = tx::TransactionBuilder::create(bytecode.into(), salt, storage_slots)
-        .add_unsigned_coin_input(
-            metadata.secret_key,
-            metadata.utxo_id,
-            metadata.amount,
-            metadata.asset_id,
-            metadata.tx_pointer,
-            metadata.maturity,
-        )
+        .add_unsigned_coin_input(secret_key, utxo_id, amount, asset_id, tx_pointer, maturity)
         .add_output(tx::Output::contract_created(contract_id, state_root))
-        .maturity(metadata.maturity)
-        .finalize_checked(metadata.block_height, &params);
+        .maturity(maturity)
+        .finalize_checked(block_height, &params);
 
     // Deploy the contract.
     interpreter.transact(tx)?;
@@ -471,20 +434,21 @@ fn exec_test(
 
     // Create a transaction to execute the test function.
     let script_input_data = vec![];
-    let mut rng = rand::rngs::StdRng::seed_from_u64(0x7E57u64);
-    let metadata: TxMetadata = rng.gen();
+
+    let mut rng = rand::rngs::StdRng::seed_from_u64(TX_RNG_SEED);
+    let secret_key = rng.gen();
+    let utxo_id = rng.gen();
+    let amount = 1;
+    let asset_id = rng.gen();
+    let tx_pointer = rng.gen();
+    let maturity = 1;
+    let block_height = (u32::MAX >> 1) as u64;
+
     let params = tx::ConsensusParameters::default();
     let mut tx = tx::TransactionBuilder::script(bytecode, script_input_data)
-        .add_unsigned_coin_input(
-            metadata.secret_key,
-            metadata.utxo_id,
-            metadata.amount,
-            metadata.asset_id,
-            metadata.tx_pointer,
-            0,
-        )
+        .add_unsigned_coin_input(secret_key, utxo_id, amount, asset_id, tx_pointer, 0)
         .gas_limit(tx::ConsensusParameters::DEFAULT.max_gas_per_tx)
-        .maturity(metadata.maturity)
+        .maturity(maturity)
         .clone();
     if let Some(contract_id) = contract_id {
         tx.add_input(tx::Input::Contract {
@@ -500,7 +464,7 @@ fn exec_test(
             state_root: tx::Bytes32::zeroed(),
         });
     }
-    let tx = tx.finalize_checked(metadata.block_height, &params);
+    let tx = tx.finalize_checked(block_height, &params);
 
     let mut interpreter = vm::interpreter::Interpreter::with_storage(storage, params);
 
