@@ -8,7 +8,7 @@ use crate::{
     CreateTypeId, TypeInfo,
 };
 
-use super::{ReplaceSelfType, TypeArgument, TypeId};
+use super::{TypeArgument, TypeId};
 
 /// A `TypeBinding` is the result of using turbofish to bind types to
 /// generic parameters.
@@ -91,7 +91,7 @@ impl TypeBinding<CallPath<(TypeInfo, Span)>> {
         let mut errors = vec![];
 
         let type_engine = ctx.type_engine;
-        let declaration_engine = ctx.declaration_engine;
+        let decl_engine = ctx.decl_engine;
 
         let (type_info, type_info_span) = self.inner.suffix.clone();
 
@@ -115,12 +115,12 @@ impl TypeBinding<CallPath<(TypeInfo, Span)>> {
         // resolve the type of the type info object
         let type_id = check!(
             ctx.resolve_type_with_self(
-                type_engine.insert_type(declaration_engine, type_info),
+                type_engine.insert_type(decl_engine, type_info),
                 &type_info_span,
                 EnforceTypeArguments::No,
                 Some(&type_info_prefix)
             ),
-            type_engine.insert_type(declaration_engine, TypeInfo::ErrorRecovery),
+            type_engine.insert_type(decl_engine, TypeInfo::ErrorRecovery),
             warnings,
             errors
         );
@@ -138,7 +138,7 @@ impl TypeBinding<CallPath> {
         let mut errors = vec![];
 
         let type_engine = ctx.type_engine;
-        let declaration_engine = ctx.declaration_engine;
+        let decl_engine = ctx.decl_engine;
         let engines = ctx.engines();
 
         // grab the declaration
@@ -151,12 +151,16 @@ impl TypeBinding<CallPath> {
 
         // replace the self types inside of the type arguments
         for type_argument in self.type_arguments.iter_mut() {
-            type_argument.replace_self_type(engines, ctx.self_type());
-            type_argument.type_id = check!(
-                ctx.resolve_type_without_self(type_argument.type_id, &type_argument.span, None),
-                type_engine.insert_type(declaration_engine, TypeInfo::ErrorRecovery),
+            check!(
+                ctx.resolve_type_with_self(
+                    type_argument.type_id,
+                    &type_argument.span,
+                    EnforceTypeArguments::Yes,
+                    None
+                ),
+                type_engine.insert_type(decl_engine, TypeInfo::ErrorRecovery),
                 warnings,
-                errors
+                errors,
             );
         }
 
@@ -170,7 +174,7 @@ impl TypeBinding<CallPath> {
                 // get the copy from the declaration engine
                 let mut new_copy = check!(
                     CompileResult::from(
-                        declaration_engine.get_function(original_id.clone(), &self.span())
+                        decl_engine.get_function(original_id.clone(), &self.span())
                     ),
                     return err(warnings, errors),
                     warnings,
@@ -192,16 +196,16 @@ impl TypeBinding<CallPath> {
 
                 // insert the new copy into the declaration engine
                 let new_id = ctx
-                    .declaration_engine
-                    .insert_function(new_copy)
-                    .with_parent(ctx.declaration_engine, original_id);
+                    .decl_engine
+                    .insert(new_copy)
+                    .with_parent(ctx.decl_engine, original_id);
 
                 ty::TyDeclaration::FunctionDeclaration(new_id)
             }
             ty::TyDeclaration::EnumDeclaration(original_id) => {
                 // get the copy from the declaration engine
                 let mut new_copy = check!(
-                    CompileResult::from(declaration_engine.get_enum(original_id, &self.span())),
+                    CompileResult::from(decl_engine.get_enum(original_id, &self.span())),
                     return err(warnings, errors),
                     warnings,
                     errors
@@ -227,14 +231,14 @@ impl TypeBinding<CallPath> {
                 );
 
                 // insert the new copy into the declaration engine
-                let new_id = ctx.declaration_engine.insert_enum(new_copy);
+                let new_id = ctx.decl_engine.insert(new_copy);
 
                 ty::TyDeclaration::EnumDeclaration(new_id)
             }
             ty::TyDeclaration::StructDeclaration(original_id) => {
                 // get the copy from the declaration engine
                 let mut new_copy = check!(
-                    CompileResult::from(declaration_engine.get_struct(original_id, &self.span())),
+                    CompileResult::from(decl_engine.get_struct(original_id, &self.span())),
                     return err(warnings, errors),
                     warnings,
                     errors
@@ -260,12 +264,13 @@ impl TypeBinding<CallPath> {
                 );
 
                 // insert the new copy into the declaration engine
-                let new_id = ctx.declaration_engine.insert_struct(new_copy);
+                let new_id = ctx.decl_engine.insert(new_copy);
 
                 ty::TyDeclaration::StructDeclaration(new_id)
             }
             _ => unknown_decl,
         };
+
         ok(new_decl, warnings, errors)
     }
 }

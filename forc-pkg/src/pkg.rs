@@ -11,7 +11,7 @@ use forc_util::{
     default_output_directory, find_file_name, git_checkouts_directory, kebab_to_snake_case,
     print_on_failure, print_on_success, user_forc_directory,
 };
-use fuels_types::program_abi;
+use fuel_abi_types::program_abi;
 use petgraph::{
     self,
     visit::{Bfs, Dfs, EdgeRef, Walker},
@@ -27,7 +27,7 @@ use std::{
     str::FromStr,
 };
 use sway_core::{
-    declaration_engine::DeclarationEngine,
+    decl_engine::DeclEngine,
     fuel_prelude::{
         fuel_crypto,
         fuel_tx::{self, Contract, ContractId, StorageSlot},
@@ -94,7 +94,7 @@ pub struct BuiltPackage {
     pub tree_type: TreeType,
     source_map: SourceMap,
     pub pkg_name: String,
-    pub declaration_engine: DeclarationEngine,
+    pub decl_engine: DeclEngine,
     pub manifest_file: PackageManifestFile,
 }
 
@@ -2424,7 +2424,7 @@ pub fn compile(
                 entries,
                 source_map: source_map.to_owned(),
                 pkg_name: pkg.name.clone(),
-                declaration_engine: engines.de().clone(),
+                decl_engine: engines.de().clone(),
                 manifest_file: manifest.clone(),
             };
             Ok((built_package, namespace))
@@ -2634,8 +2634,8 @@ pub fn build(
         .collect();
 
     let type_engine = TypeEngine::default();
-    let declaration_engine = DeclarationEngine::default();
-    let engines = Engines::new(&type_engine, &declaration_engine);
+    let decl_engine = DeclEngine::default();
+    let engines = Engines::new(&type_engine, &decl_engine);
 
     let mut lib_namespace_map = Default::default();
     let mut compiled_contract_deps = HashMap::new();
@@ -2849,6 +2849,7 @@ impl Programs {
 pub fn check(
     plan: &BuildPlan,
     terse_mode: bool,
+    include_tests: bool,
     engines: Engines<'_>,
 ) -> anyhow::Result<Vec<CompileResult<Programs>>> {
     let mut lib_namespace_map = Default::default();
@@ -2875,7 +2876,7 @@ pub fn check(
             value,
             mut warnings,
             mut errors,
-        } = parse(manifest, terse_mode, engines)?;
+        } = parse(manifest, terse_mode, include_tests, engines)?;
 
         let (lexed, parsed) = match value {
             None => {
@@ -2919,6 +2920,7 @@ pub fn check(
 pub fn parse(
     manifest: &PackageManifestFile,
     terse_mode: bool,
+    include_tests: bool,
     engines: Engines<'_>,
 ) -> anyhow::Result<CompileResult<(LexedProgram, ParseProgram)>> {
     let profile = BuildProfile {
@@ -2926,7 +2928,8 @@ pub fn parse(
         ..BuildProfile::debug()
     };
     let source = manifest.entry_string()?;
-    let sway_build_config = sway_build_config(manifest.dir(), &manifest.entry_path(), &profile)?;
+    let sway_build_config = sway_build_config(manifest.dir(), &manifest.entry_path(), &profile)?
+        .include_tests(include_tests);
     Ok(sway_core::parse(source, engines, Some(&sway_build_config)))
 }
 

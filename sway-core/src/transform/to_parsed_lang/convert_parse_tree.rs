@@ -872,7 +872,7 @@ fn generic_params_opt_to_type_parameters(
     where_clause_opt: Option<WhereClause>,
 ) -> Result<Vec<TypeParameter>, ErrorEmitted> {
     let type_engine = engines.te();
-    let declaration_engine = engines.de();
+    let decl_engine = engines.de();
 
     let trait_constraints = match where_clause_opt {
         Some(where_clause) => where_clause
@@ -890,7 +890,7 @@ fn generic_params_opt_to_type_parameters(
             .into_iter()
             .map(|ident| {
                 let custom_type = type_engine.insert_type(
-                    declaration_engine,
+                    decl_engine,
                     TypeInfo::Custom {
                         name: ident.clone(),
                         type_arguments: None,
@@ -961,7 +961,7 @@ fn type_field_to_enum_variant(
     let type_span = if let Ty::Path(path_type) = &type_field.ty {
         path_type.prefix.name.span()
     } else {
-        span.clone()
+        type_field.ty.span()
     };
 
     let enum_variant = EnumVariant {
@@ -1113,10 +1113,10 @@ fn ty_to_type_argument(
     ty: Ty,
 ) -> Result<TypeArgument, ErrorEmitted> {
     let type_engine = engines.te();
-    let declaration_engine = engines.de();
+    let decl_engine = engines.de();
     let span = ty.span();
     let initial_type_id = type_engine.insert_type(
-        declaration_engine,
+        decl_engine,
         ty_to_type_info(context, handler, engines, ty)?,
     );
     let type_argument = TypeArgument {
@@ -1410,6 +1410,7 @@ fn expr_func_app_to_expression_kind(
         Some(intrinsic) if last.is_none() && !is_absolute => {
             return Ok(ExpressionKind::IntrinsicFunction(
                 IntrinsicFunctionExpression {
+                    name: call_seg.name,
                     kind_binding: TypeBinding {
                         inner: intrinsic,
                         type_arguments,
@@ -1541,19 +1542,28 @@ fn expr_to_expression(
                         .into_iter()
                         .map(|expr| expr_to_expression(context, handler, engines, expr))
                         .collect::<Result<_, _>>()?;
+                    let array_expression = ArrayExpression {
+                        contents,
+                        length_span: None,
+                    };
                     Expression {
-                        kind: ExpressionKind::Array(contents),
+                        kind: ExpressionKind::Array(array_expression),
                         span,
                     }
                 }
                 ExprArrayDescriptor::Repeat { value, length, .. } => {
                     let expression = expr_to_expression(context, handler, engines, *value)?;
+                    let length_span = length.span();
                     let length = expr_to_usize(context, handler, *length)?;
                     let contents = iter::repeat_with(|| expression.clone())
                         .take(length)
                         .collect();
+                    let array_expression = ArrayExpression {
+                        contents,
+                        length_span: Some(length_span),
+                    };
                     Expression {
-                        kind: ExpressionKind::Array(contents),
+                        kind: ExpressionKind::Array(array_expression),
                         span,
                     }
                 }
@@ -1745,8 +1755,18 @@ fn expr_to_expression(
             }),
             span,
         },
-        Expr::Ref { .. } => unimplemented!(),
-        Expr::Deref { .. } => unimplemented!(),
+        Expr::Ref { ref_token, .. } => {
+            let error = ConvertParseTreeError::RefExprNotYetSupported {
+                span: ref_token.span(),
+            };
+            return Err(handler.emit_err(error.into()));
+        }
+        Expr::Deref { deref_token, .. } => {
+            let error = ConvertParseTreeError::DerefExprNotYetSupported {
+                span: deref_token.span(),
+            };
+            return Err(handler.emit_err(error.into()));
+        }
         Expr::Not { bang_token, expr } => {
             let expr = expr_to_expression(context, handler, engines, *expr)?;
             op_call("not", bang_token.span(), span, &[expr])?
@@ -3168,12 +3188,12 @@ fn ty_to_type_parameter(
     ty: Ty,
 ) -> Result<TypeParameter, ErrorEmitted> {
     let type_engine = engines.te();
-    let declaration_engine = engines.de();
+    let decl_engine = engines.de();
 
     let name_ident = match ty {
         Ty::Path(path_type) => path_type_to_ident(context, handler, path_type)?,
         Ty::Infer { underscore_token } => {
-            let unknown_type = type_engine.insert_type(declaration_engine, TypeInfo::Unknown);
+            let unknown_type = type_engine.insert_type(decl_engine, TypeInfo::Unknown);
             return Ok(TypeParameter {
                 type_id: unknown_type,
                 initial_type_id: unknown_type,
@@ -3187,7 +3207,7 @@ fn ty_to_type_parameter(
         Ty::Str { .. } => panic!("str types are not allowed in this position"),
     };
     let custom_type = type_engine.insert_type(
-        declaration_engine,
+        decl_engine,
         TypeInfo::Custom {
             name: name_ident.clone(),
             type_arguments: None,
@@ -3394,7 +3414,7 @@ fn generic_args_to_type_arguments(
     generic_args: GenericArgs,
 ) -> Result<Vec<TypeArgument>, ErrorEmitted> {
     let type_engine = engines.te();
-    let declaration_engine = engines.de();
+    let decl_engine = engines.de();
 
     generic_args
         .parameters
@@ -3403,7 +3423,7 @@ fn generic_args_to_type_arguments(
         .map(|ty| {
             let span = ty.span();
             let type_id = type_engine.insert_type(
-                declaration_engine,
+                decl_engine,
                 ty_to_type_info(context, handler, engines, ty)?,
             );
             Ok(TypeArgument {

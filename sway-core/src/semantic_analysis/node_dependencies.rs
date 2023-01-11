@@ -445,8 +445,8 @@ impl Dependencies {
                     deps.gather_from_match_branch(type_engine, branch)
                 }),
             ExpressionKind::CodeBlock(contents) => self.gather_from_block(type_engine, contents),
-            ExpressionKind::Array(contents) => self
-                .gather_from_iter(contents.iter(), |deps, expr| {
+            ExpressionKind::Array(array_expression) => self
+                .gather_from_iter(array_expression.contents.iter(), |deps, expr| {
                     deps.gather_from_expr(type_engine, expr)
                 }),
             ExpressionKind::ArrayIndex(ArrayIndexExpression { prefix, index, .. }) => self
@@ -806,6 +806,7 @@ fn type_info_name(type_info: &TypeInfo) -> String {
         TypeInfo::ErrorRecovery => "err_recov",
         TypeInfo::Unknown => "unknown",
         TypeInfo::UnknownGeneric { name, .. } => return format!("generic {}", name),
+        TypeInfo::Placeholder(_) => "_",
         TypeInfo::ContractCaller { abi_name, .. } => {
             return format!("contract caller {}", abi_name);
         }
