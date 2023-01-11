@@ -768,9 +768,9 @@ fn type_check_trait_implementation(
 
         let self_type_mapping = TypeMapping::new_from_self_type(engines, type_implementing_for);
 
-        // replace instances of `TypeInfo::SelfType` with a fresh
-        // `TypeInfo::SelfType` to avoid replacing types in the original trait
-        // declaration
+        // Replace instances of the self type with the fresh type that we are
+        // implementing for to avoid replacing types in the original trait
+        // declaration.
         impl_method_signature.copy_types(&self_type_mapping, engines);
 
         // ensure this fn decl's parameters and signature lines up with the one
@@ -813,9 +813,6 @@ fn type_check_trait_implementation(
                 });
             }
 
-            impl_method_param
-                .type_id
-                .copy_types(&self_type_mapping, engines);
             if !type_engine.look_up_type_id(impl_method_param.type_id).eq(
                 &type_engine.look_up_type_id(impl_method_signature_param.type_id),
                 engines,
@@ -881,9 +878,6 @@ fn type_check_trait_implementation(
             (true, true) | (false, false) => (), // no payability mismatch
         }
 
-        impl_method
-            .return_type
-            .copy_types(&self_type_mapping, engines);
         if !type_engine.look_up_type_id(impl_method.return_type).eq(
             &type_engine.look_up_type_id(impl_method_signature.return_type),
             engines,
