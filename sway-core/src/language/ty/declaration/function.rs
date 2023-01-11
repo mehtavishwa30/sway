@@ -65,19 +65,6 @@ impl CopyTypes for TyFunctionDeclaration {
     }
 }
 
-impl ReplaceSelfType for TyFunctionDeclaration {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_parameters
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-        self.parameters
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-        self.return_type.replace_self_type(engines, self_type);
-        self.body.replace_self_type(engines, self_type);
-    }
-}
-
 impl ReplaceDecls for TyFunctionDeclaration {
     fn replace_decls_inner(&mut self, decl_mapping: &DeclMapping, engines: Engines<'_>) {
         self.body.replace_decls(decl_mapping, engines);
@@ -91,8 +78,11 @@ impl Spanned for TyFunctionDeclaration {
 }
 
 impl MonomorphizeHelper for TyFunctionDeclaration {
-    fn type_parameters(&self) -> &[TypeParameter] {
-        &self.type_parameters
+    fn type_parameters(&self) -> Vec<&TypeParameter> {
+        self.type_parameters
+            .iter()
+            .filter(|type_param| !type_param.is_self_type)
+            .collect()
     }
 
     fn name(&self) -> &Ident {
@@ -430,12 +420,6 @@ impl PartialEqWithEngines for TyFunctionParameter {
 impl CopyTypes for TyFunctionParameter {
     fn copy_types_inner(&mut self, type_mapping: &TypeMapping, engines: Engines<'_>) {
         self.type_id.copy_types(type_mapping, engines);
-    }
-}
-
-impl ReplaceSelfType for TyFunctionParameter {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_id.replace_self_type(engines, self_type);
     }
 }
 

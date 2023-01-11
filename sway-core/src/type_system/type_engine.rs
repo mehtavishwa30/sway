@@ -167,10 +167,8 @@ impl TypeEngine {
         let mut warnings = vec![];
         let mut errors = vec![];
         let engines = Engines::new(self, declaration_engine);
-        match (
-            value.type_parameters().is_empty(),
-            type_arguments.is_empty(),
-        ) {
+        let type_parameters = value.type_parameters();
+        match (type_parameters.is_empty(), type_arguments.is_empty()) {
             (true, true) => ok((), warnings, errors),
             (false, true) => {
                 if let EnforceTypeArguments::Yes = enforce_type_arguments {
@@ -180,8 +178,10 @@ impl TypeEngine {
                     });
                     return err(warnings, errors);
                 }
-                let type_mapping =
-                    TypeMapping::from_type_parameters(engines, value.type_parameters());
+                let type_mapping = TypeMapping::from_type_parameters(
+                    engines,
+                    &type_parameters.iter().cloned().cloned().collect::<Vec<_>>(),
+                );
                 value.copy_types(&type_mapping, engines);
                 ok((), warnings, errors)
             }
@@ -203,10 +203,10 @@ impl TypeEngine {
                     .map(|x| x.span.clone())
                     .reduce(Span::join)
                     .unwrap_or_else(|| value.name().span());
-                if value.type_parameters().len() != type_arguments.len() {
+                if type_parameters.len() != type_arguments.len() {
                     errors.push(CompileError::IncorrectNumberOfTypeArguments {
                         given: type_arguments.len(),
-                        expected: value.type_parameters().len(),
+                        expected: type_parameters.len(),
                         span: type_arguments_span,
                     });
                     return err(warnings, errors);
@@ -228,8 +228,7 @@ impl TypeEngine {
                     );
                 }
                 let type_mapping = TypeMapping::from_type_parameters_and_type_arguments(
-                    value
-                        .type_parameters()
+                    type_parameters
                         .iter()
                         .map(|type_param| type_param.type_id)
                         .collect(),
@@ -242,32 +241,6 @@ impl TypeEngine {
                 ok((), warnings, errors)
             }
         }
-    }
-
-    /// Replace any instances of the [TypeInfo::SelfType] variant with
-    /// `self_type` in both `received` and `expected`, then unify `received` and
-    /// `expected`.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn unify_with_self(
-        &self,
-        declaration_engine: &DeclarationEngine,
-        mut received: TypeId,
-        mut expected: TypeId,
-        self_type: TypeId,
-        span: &Span,
-        help_text: &str,
-        err_override: Option<CompileError>,
-    ) -> (Vec<CompileWarning>, Vec<CompileError>) {
-        received.replace_self_type(Engines::new(self, declaration_engine), self_type);
-        expected.replace_self_type(Engines::new(self, declaration_engine), self_type);
-        self.unify(
-            declaration_engine,
-            received,
-            expected,
-            span,
-            help_text,
-            err_override,
-        )
     }
 
     /// Make the types of `received` and `expected` equivalent (or produce an
@@ -572,32 +545,6 @@ impl TypeEngine {
         ok(type_id, warnings, errors)
     }
 
-    /// Replace any instances of the [TypeInfo::SelfType] variant with
-    /// `self_type` in `type_id`, then resolve `type_id`.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn resolve_type_with_self(
-        &self,
-        declaration_engine: &DeclarationEngine,
-        mut type_id: TypeId,
-        self_type: TypeId,
-        span: &Span,
-        enforce_type_arguments: EnforceTypeArguments,
-        type_info_prefix: Option<&Path>,
-        namespace: &mut Namespace,
-        mod_path: &Path,
-    ) -> CompileResult<TypeId> {
-        type_id.replace_self_type(Engines::new(self, declaration_engine), self_type);
-        self.resolve_type(
-            declaration_engine,
-            type_id,
-            span,
-            enforce_type_arguments,
-            type_info_prefix,
-            namespace,
-            mod_path,
-        )
-    }
-
     /// Pretty print method for printing the [TypeEngine]. This method is
     /// manually implemented to avoid implementation overhead regarding using
     /// [DisplayWithEngines].
@@ -621,7 +568,7 @@ fn normalize_err(
 
 pub(crate) trait MonomorphizeHelper {
     fn name(&self) -> &Ident;
-    fn type_parameters(&self) -> &[TypeParameter];
+    fn type_parameters(&self) -> Vec<&TypeParameter>;
 }
 
 /// This type is used to denote if, during monomorphization, the compiler

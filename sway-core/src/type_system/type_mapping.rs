@@ -1,5 +1,7 @@
 use std::fmt;
 
+use sway_types::Span;
+
 use super::*;
 use crate::engine_threading::*;
 
@@ -72,6 +74,27 @@ impl TypeMapping {
             })
             .collect();
         TypeMapping { mapping }
+    }
+
+    pub(crate) fn new_from_self_type(engines: Engines<'_>, dest_type: TypeId) -> TypeMapping {
+        let type_engine = engines.te();
+        let declaration_engine = engines.de();
+        let source_type = type_engine.insert_type(
+            declaration_engine,
+            TypeInfo::new_self_type_generic(&Span::dummy()),
+        );
+        let mapping = vec![(source_type, dest_type)];
+        TypeMapping { mapping }
+    }
+
+    pub(crate) fn extend_with_self_type(&mut self, engines: Engines<'_>, dest_type: TypeId) {
+        let type_engine = engines.te();
+        let declaration_engine = engines.de();
+        let source_type = type_engine.insert_type(
+            declaration_engine,
+            TypeInfo::new_self_type_generic(&Span::dummy()),
+        );
+        self.mapping.push((source_type, dest_type));
     }
 
     /// Constructs a new [TypeMapping] from a superset [TypeId] and a subset
@@ -234,7 +257,6 @@ impl TypeMapping {
             }
             (TypeInfo::Unknown, TypeInfo::Unknown)
             | (TypeInfo::Boolean, TypeInfo::Boolean)
-            | (TypeInfo::SelfType, TypeInfo::SelfType)
             | (TypeInfo::B256, TypeInfo::B256)
             | (TypeInfo::Numeric, TypeInfo::Numeric)
             | (TypeInfo::Contract, TypeInfo::Contract)
@@ -435,7 +457,6 @@ impl TypeMapping {
             | TypeInfo::UnsignedInteger(..)
             | TypeInfo::Boolean
             | TypeInfo::ContractCaller { .. }
-            | TypeInfo::SelfType
             | TypeInfo::B256
             | TypeInfo::Numeric
             | TypeInfo::RawUntypedPtr

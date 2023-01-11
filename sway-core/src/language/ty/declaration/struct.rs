@@ -39,17 +39,6 @@ impl CopyTypes for TyStructDeclaration {
     }
 }
 
-impl ReplaceSelfType for TyStructDeclaration {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.fields
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-        self.type_parameters
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-    }
-}
-
 impl CreateTypeId for TyStructDeclaration {
     fn create_type_id(&self, engines: Engines<'_>) -> TypeId {
         let type_engine = engines.te();
@@ -59,7 +48,12 @@ impl CreateTypeId for TyStructDeclaration {
             TypeInfo::Struct {
                 name: self.name.clone(),
                 fields: self.fields.clone(),
-                type_parameters: self.type_parameters.clone(),
+                type_parameters: self
+                    .type_parameters
+                    .clone()
+                    .into_iter()
+                    .filter(|type_param| !type_param.is_self_type)
+                    .collect(),
             },
         )
     }
@@ -72,8 +66,11 @@ impl Spanned for TyStructDeclaration {
 }
 
 impl MonomorphizeHelper for TyStructDeclaration {
-    fn type_parameters(&self) -> &[TypeParameter] {
-        &self.type_parameters
+    fn type_parameters(&self) -> Vec<&TypeParameter> {
+        self.type_parameters
+            .iter()
+            .filter(|type_param| !type_param.is_self_type)
+            .collect()
     }
 
     fn name(&self) -> &Ident {
@@ -147,11 +144,5 @@ impl PartialEqWithEngines for TyStructField {
 impl CopyTypes for TyStructField {
     fn copy_types_inner(&mut self, type_mapping: &TypeMapping, engines: Engines<'_>) {
         self.type_id.copy_types(type_mapping, engines);
-    }
-}
-
-impl ReplaceSelfType for TyStructField {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_id.replace_self_type(engines, self_type);
     }
 }

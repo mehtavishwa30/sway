@@ -4,12 +4,8 @@ use sway_error::error::CompileError;
 use sway_types::{Ident, Span, Spanned};
 
 use crate::{
-    declaration_engine::DeclarationId,
-    engine_threading::*,
-    error::*,
-    language::CallPath,
-    type_system::{CopyTypes, TypeId},
-    ReplaceSelfType, TraitConstraint, TypeArgument, TypeEngine, TypeInfo, TypeMapping,
+    declaration_engine::DeclarationId, engine_threading::*, error::*, language::CallPath,
+    type_system::*,
 };
 
 #[derive(Clone, Debug)]
@@ -590,18 +586,22 @@ impl TraitMap {
                         engines,
                     );
                 } else if decider(&type_info, &type_engine.look_up_type_id(*map_type_id)) {
-                    let type_mapping =
+                    let mut type_mapping =
                         TypeMapping::from_superset_and_subset(type_engine, *map_type_id, *type_id);
-                    let new_self_type =
-                        type_engine.insert_type(declaration_engine, TypeInfo::SelfType);
-                    type_id.replace_self_type(engines, new_self_type);
+                    type_mapping.extend_with_self_type(
+                        engines,
+                        type_engine.insert_type(
+                            declaration_engine,
+                            TypeInfo::new_self_type_generic(&Span::dummy()),
+                        ),
+                    );
+                    type_id.copy_types(&type_mapping, engines);
                     let trait_methods: TraitMethods = map_trait_methods
                         .clone()
                         .into_iter()
                         .map(|(name, decl_id)| {
                             let mut decl = declaration_engine.look_up_decl_id(decl_id.clone());
                             decl.copy_types(&type_mapping, engines);
-                            decl.replace_self_type(engines, new_self_type);
                             (
                                 name,
                                 declaration_engine
@@ -804,7 +804,6 @@ fn are_equal_minus_dynamic_types(type_engine: &TypeEngine, left: TypeId, right: 
         // TypeId, they may later resolve to be different types in the type
         // engine
         (TypeInfo::Unknown, TypeInfo::Unknown) => false,
-        (TypeInfo::SelfType, TypeInfo::SelfType) => false,
         (TypeInfo::Numeric, TypeInfo::Numeric) => false,
         (TypeInfo::Contract, TypeInfo::Contract) => false,
         (TypeInfo::Storage { .. }, TypeInfo::Storage { .. }) => false,

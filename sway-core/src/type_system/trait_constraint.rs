@@ -46,14 +46,6 @@ impl CopyTypes for TraitConstraint {
     }
 }
 
-impl ReplaceSelfType for TraitConstraint {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_arguments
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-    }
-}
-
 impl From<&Supertrait> for TraitConstraint {
     fn from(supertrait: &Supertrait) -> Self {
         TraitConstraint {
@@ -133,7 +125,12 @@ impl TraitConstraint {
         // Type check the type arguments.
         for type_argument in self.type_arguments.iter_mut() {
             type_argument.type_id = check!(
-                ctx.resolve_type_without_self(type_argument.type_id, &type_argument.span, None),
+                ctx.resolve_type(
+                    type_argument.type_id,
+                    &type_argument.span,
+                    EnforceTypeArguments::Yes,
+                    None
+                ),
                 ctx.type_engine
                     .insert_type(declaration_engine, TypeInfo::ErrorRecovery),
                 warnings,

@@ -1,4 +1,5 @@
 use sway_error::error::CompileError;
+use sway_types::Spanned;
 
 use crate::{
     error::*,
@@ -11,6 +12,10 @@ impl ty::TyEnumDeclaration {
     pub fn type_check(ctx: TypeCheckContext, decl: EnumDeclaration) -> CompileResult<Self> {
         let mut errors = vec![];
         let mut warnings = vec![];
+
+        let type_engine = ctx.type_engine;
+        let declaration_engine = ctx.declaration_engine;
+        let engines = ctx.engines();
 
         let EnumDeclaration {
             name,
@@ -44,6 +49,12 @@ impl ty::TyEnumDeclaration {
             ));
         }
 
+        // Create the type param for the self type and add it to the enum type
+        // params. This will also add it to the namespace.
+        let self_type_param = TypeParameter::new_self_type_param(ctx.by_ref(), &name.span());
+        let self_type_id = self_type_param.type_id;
+        new_type_parameters.push(self_type_param);
+
         // type check the variants
         let mut variants_buf = vec![];
         for variant in variants {
@@ -57,13 +68,29 @@ impl ty::TyEnumDeclaration {
 
         // create the enum decl
         let decl = ty::TyEnumDeclaration {
-            name,
+            name: name.clone(),
             type_parameters: new_type_parameters,
             variants: variants_buf,
             span,
             attributes,
             visibility,
         };
+
+        // Unify the type of the new enum declaration with the self type param.
+        check!(
+            CompileResult::from(type_engine.unify(
+                declaration_engine,
+                decl.create_type_id(engines),
+                self_type_id,
+                &name.span(),
+                "self type",
+                None
+            )),
+            return err(warnings, errors),
+            warnings,
+            errors
+        );
+
         ok(decl, warnings, errors)
     }
 }
@@ -79,7 +106,7 @@ impl ty::TyEnumVariant {
         let declaration_engine = ctx.declaration_engine;
         let initial_type_id = type_engine.insert_type(declaration_engine, variant.type_info);
         let enum_variant_type = check!(
-            ctx.resolve_type_with_self(
+            ctx.resolve_type(
                 initial_type_id,
                 &variant.span,
                 EnforceTypeArguments::Yes,

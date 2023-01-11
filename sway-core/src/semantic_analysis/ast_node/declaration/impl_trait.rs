@@ -55,10 +55,22 @@ impl ty::TyImplTrait {
             ));
         }
 
+        // Create the type param for the self type and add it to the impl block
+        // type params. This will also add it to the namespace.
+        let self_type_param =
+            TypeParameter::new_self_type_param(ctx.by_ref(), &type_implementing_for_span);
+        let self_type_id = self_type_param.type_id;
+        new_impl_type_parameters.push(self_type_param);
+
         // resolve the types of the trait type arguments
         for type_arg in trait_type_arguments.iter_mut() {
             type_arg.type_id = check!(
-                ctx.resolve_type_without_self(type_arg.type_id, &type_arg.span, None),
+                ctx.resolve_type(
+                    type_arg.type_id,
+                    &type_arg.span,
+                    EnforceTypeArguments::Yes,
+                    None
+                ),
                 return err(warnings, errors),
                 warnings,
                 errors
@@ -67,9 +79,10 @@ impl ty::TyImplTrait {
 
         // type check the type that we are implementing for
         let implementing_for_type_id = check!(
-            ctx.resolve_type_without_self(
+            ctx.resolve_type(
                 type_engine.insert_type(declaration_engine, type_implementing_for),
                 &type_implementing_for_span,
+                EnforceTypeArguments::Yes,
                 None
             ),
             return err(warnings, errors),
@@ -91,7 +104,9 @@ impl ty::TyImplTrait {
         check!(
             check_for_unconstrained_type_parameters(
                 engines,
-                &new_impl_type_parameters,
+                new_impl_type_parameters
+                    .iter()
+                    .filter(|type_param| !type_param.is_self_type),
                 &trait_type_arguments,
                 implementing_for_type_id,
                 &type_implementing_for_span
@@ -101,9 +116,23 @@ impl ty::TyImplTrait {
             errors
         );
 
+        // Unify the type that we are implementing for with the self type param.
+        check!(
+            CompileResult::from(type_engine.unify(
+                declaration_engine,
+                implementing_for_type_id,
+                self_type_id,
+                &type_implementing_for_span,
+                "self type",
+                None
+            )),
+            return err(warnings, errors),
+            warnings,
+            errors
+        );
+
         // Update the context with the new `self` type.
         let mut ctx = ctx
-            .with_self_type(implementing_for_type_id)
             .with_help_text("")
             .with_type_annotation(type_engine.insert_type(declaration_engine, TypeInfo::Unknown));
 
@@ -143,6 +172,7 @@ impl ty::TyImplTrait {
                         &trait_decl.supertraits,
                         &trait_decl.interface_surface,
                         &trait_decl.methods,
+                        implementing_for_type_id,
                         &functions,
                         &trait_name,
                         &block_span,
@@ -196,6 +226,7 @@ impl ty::TyImplTrait {
                         &[], // this is empty because abi definitions don't support supertraits,
                         &abi.interface_surface,
                         &abi.methods,
+                        implementing_for_type_id,
                         &functions,
                         &trait_name,
                         &block_span,
@@ -490,11 +521,19 @@ impl ty::TyImplTrait {
             return err(warnings, errors);
         }
 
+        // Create the type param for the self type and add it to the impl block
+        // type params. This will also add it to the namespace.
+        let self_type_param =
+            TypeParameter::new_self_type_param(ctx.by_ref(), &type_implementing_for_span);
+        let self_type_id = self_type_param.type_id;
+        new_impl_type_parameters.push(self_type_param);
+
         // type check the type that we are implementing for
         let implementing_for_type_id = check!(
-            ctx.resolve_type_without_self(
+            ctx.resolve_type(
                 type_engine.insert_type(declaration_engine, type_implementing_for),
                 &type_implementing_for_span,
+                EnforceTypeArguments::Yes,
                 None
             ),
             return err(warnings, errors),
@@ -516,7 +555,9 @@ impl ty::TyImplTrait {
         check!(
             check_for_unconstrained_type_parameters(
                 engines,
-                &new_impl_type_parameters,
+                new_impl_type_parameters
+                    .iter()
+                    .filter(|type_param| !type_param.is_self_type),
                 &[],
                 implementing_for_type_id,
                 &type_implementing_for_span
@@ -526,8 +567,22 @@ impl ty::TyImplTrait {
             errors
         );
 
+        // Unify the type that we are implementing for with the self type param.
+        check!(
+            CompileResult::from(type_engine.unify(
+                declaration_engine,
+                implementing_for_type_id,
+                self_type_id,
+                &type_implementing_for_span,
+                "self type",
+                None
+            )),
+            return err(warnings, errors),
+            warnings,
+            errors
+        );
+
         let mut ctx = ctx
-            .with_self_type(implementing_for_type_id)
             .with_help_text("")
             .with_type_annotation(type_engine.insert_type(declaration_engine, TypeInfo::Unknown));
 
@@ -584,6 +639,7 @@ fn type_check_trait_implementation(
     trait_supertraits: &[Supertrait],
     trait_interface_surface: &[DeclarationId],
     trait_methods: &[DeclarationId],
+    type_implementing_for: TypeId,
     impl_methods: &[FunctionDeclaration],
     trait_name: &CallPath,
     block_span: &Span,
@@ -597,7 +653,6 @@ fn type_check_trait_implementation(
     let type_engine = ctx.type_engine;
     let declaration_engine = ctx.declaration_engine;
     let engines = ctx.engines();
-    let self_type = ctx.self_type();
 
     let interface_name = || -> InterfaceName {
         if is_contract {
@@ -613,7 +668,7 @@ fn type_check_trait_implementation(
         ctx.namespace
             .implemented_traits
             .check_if_trait_constraints_are_satisfied_for_type(
-                self_type,
+                type_implementing_for,
                 &trait_supertraits
                     .iter()
                     .map(|x| x.into())
@@ -628,7 +683,7 @@ fn type_check_trait_implementation(
 
     // Gather the supertrait "original_method_ids" and "impld_method_ids".
     let (supertrait_original_method_ids, supertrait_impld_method_ids) = check!(
-        handle_supertraits(ctx.by_ref(), trait_supertraits),
+        handle_supertraits(ctx.by_ref(), trait_supertraits, type_implementing_for),
         return err(warnings, errors),
         warnings,
         errors
@@ -642,7 +697,7 @@ fn type_check_trait_implementation(
     ctx.namespace.insert_trait_implementation(
         trait_name.clone(),
         trait_type_arguments.to_vec(),
-        self_type,
+        type_implementing_for,
         &supertrait_impld_method_ids
             .values()
             .cloned()
@@ -711,10 +766,12 @@ fn type_check_trait_implementation(
             }
         };
 
+        let self_type_mapping = TypeMapping::new_from_self_type(engines, type_implementing_for);
+
         // replace instances of `TypeInfo::SelfType` with a fresh
         // `TypeInfo::SelfType` to avoid replacing types in the original trait
         // declaration
-        impl_method_signature.replace_self_type(engines, self_type);
+        impl_method_signature.copy_types(&self_type_mapping, engines);
 
         // ensure this fn decl's parameters and signature lines up with the one
         // in the trait
@@ -758,7 +815,7 @@ fn type_check_trait_implementation(
 
             impl_method_param
                 .type_id
-                .replace_self_type(engines, self_type);
+                .copy_types(&self_type_mapping, engines);
             if !type_engine.look_up_type_id(impl_method_param.type_id).eq(
                 &type_engine.look_up_type_id(impl_method_signature_param.type_id),
                 engines,
@@ -826,7 +883,7 @@ fn type_check_trait_implementation(
 
         impl_method
             .return_type
-            .replace_self_type(engines, self_type);
+            .copy_types(&self_type_mapping, engines);
         if !type_engine.look_up_type_id(impl_method.return_type).eq(
             &type_engine.look_up_type_id(impl_method_signature.return_type),
             engines,
@@ -865,7 +922,7 @@ fn type_check_trait_implementation(
             .map(|x| WithEngines::new(x, engines))
             .collect();
         let unconstrained_type_parameters_in_the_type: HashSet<WithEngines<'_, TypeParameter>> =
-            ctx.self_type()
+            type_implementing_for
                 .unconstrained_type_parameters(engines, impl_type_parameters)
                 .into_iter()
                 .cloned()
@@ -895,7 +952,7 @@ fn type_check_trait_implementation(
     // the trait name in the current impl block that we are type checking and
     // using the original decl ids from the interface surface and the new
     // decl ids from the newly implemented methods.
-    let type_mapping = TypeMapping::from_type_parameters_and_type_arguments(
+    let mut type_mapping = TypeMapping::from_type_parameters_and_type_arguments(
         trait_type_parameters
             .iter()
             .map(|type_param| type_param.type_id)
@@ -905,6 +962,7 @@ fn type_check_trait_implementation(
             .map(|type_arg| type_arg.type_id)
             .collect(),
     );
+    type_mapping.extend_with_self_type(engines, type_implementing_for);
     original_method_ids.extend(supertrait_original_method_ids);
     impld_method_ids.extend(supertrait_impld_method_ids);
     let decl_mapping =
@@ -918,7 +976,6 @@ fn type_check_trait_implementation(
         );
         method.replace_decls(&decl_mapping, engines);
         method.copy_types(&type_mapping, engines);
-        method.replace_self_type(engines, ctx.self_type());
         all_method_ids.push(
             declaration_engine
                 .insert_function(method)
@@ -979,20 +1036,23 @@ fn type_check_trait_implementation(
 ///     }
 /// }
 /// ```
-fn check_for_unconstrained_type_parameters(
+fn check_for_unconstrained_type_parameters<'a, T>(
     engines: Engines<'_>,
-    type_parameters: &[TypeParameter],
+    type_parameters: T,
     trait_type_arguments: &[TypeArgument],
     self_type: TypeId,
     self_type_span: &Span,
-) -> CompileResult<()> {
+) -> CompileResult<()>
+where
+    T: Iterator<Item = &'a TypeParameter>,
+{
     let mut warnings = vec![];
     let mut errors = vec![];
 
     // create a list of defined generics, with the generic and a span
     let mut defined_generics: HashMap<_, _> = HashMap::from_iter(
         type_parameters
-            .iter()
+            //.iter()
             .map(|x| (engines.te().look_up_type_id(x.type_id), x.span()))
             .map(|(thing, sp)| (WithEngines::new(thing, engines), sp)),
     );
@@ -1046,6 +1106,7 @@ fn check_for_unconstrained_type_parameters(
 fn handle_supertraits(
     mut ctx: TypeCheckContext,
     supertraits: &[Supertrait],
+    type_implementing_for: TypeId,
 ) -> CompileResult<(
     BTreeMap<Ident, DeclarationId>,
     BTreeMap<Ident, DeclarationId>,
@@ -1057,7 +1118,6 @@ fn handle_supertraits(
 
     let mut interface_surface_methods_ids: BTreeMap<Ident, DeclarationId> = BTreeMap::new();
     let mut impld_method_ids: BTreeMap<Ident, DeclarationId> = BTreeMap::new();
-    let self_type = ctx.self_type();
 
     for supertrait in supertraits.iter() {
         // Right now we don't have the ability to support defining a supertrait
@@ -1090,7 +1150,11 @@ fn handle_supertraits(
 
                 // Right now we don't parse type arguments for supertraits, so
                 // we should give this error message to users.
-                if !trait_decl.type_parameters.is_empty() {
+                if trait_decl
+                    .type_parameters
+                    .iter()
+                    .any(|type_param| !type_param.is_self_type)
+                {
                     errors.push(CompileError::Unimplemented(
                         "Using generic traits as supertraits is not supported yet.",
                         supertrait.name.span(),
@@ -1103,7 +1167,7 @@ fn handle_supertraits(
                 let (trait_interface_surface_methods_ids, trait_impld_method_ids) = check!(
                     trait_decl.retrieve_interface_surface_and_implemented_methods_for_type(
                         ctx.by_ref(),
-                        self_type,
+                        type_implementing_for,
                         &supertrait.name
                     ),
                     continue,
@@ -1116,7 +1180,11 @@ fn handle_supertraits(
                 // Retrieve the interface surfaces and implemented methods for
                 // the supertraits of this type.
                 let (next_original_supertrait_decl_ids, next_these_supertrait_decl_ids) = check!(
-                    handle_supertraits(ctx.by_ref(), &trait_decl.supertraits),
+                    handle_supertraits(
+                        ctx.by_ref(),
+                        &trait_decl.supertraits,
+                        type_implementing_for
+                    ),
                     continue,
                     warnings,
                     errors

@@ -97,7 +97,7 @@ impl ty::TyFunctionDeclaration {
         // type check the return type
         let initial_return_type = type_engine.insert_type(declaration_engine, return_type);
         let return_type = check!(
-            fn_ctx.resolve_type_with_self(
+            fn_ctx.resolve_type(
                 initial_return_type,
                 &return_type_span,
                 EnforceTypeArguments::Yes,
@@ -202,11 +202,10 @@ fn unify_return_statements(
 
     for stmt in return_statements.iter() {
         check!(
-            CompileResult::from(type_engine.unify_with_self(
+            CompileResult::from(type_engine.unify(
                 declaration_engine,
                 stmt.return_type,
                 return_type,
-                ctx.self_type(),
                 &stmt.span,
                 "Return statement must return the declared function return type.",
                 None,

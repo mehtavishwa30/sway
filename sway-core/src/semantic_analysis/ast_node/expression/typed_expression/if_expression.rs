@@ -30,11 +30,10 @@ pub(crate) fn instantiate_if_expression(
             type_engine.insert_type(declaration_engine, TypeInfo::Tuple(vec![]))
         };
         append!(
-            type_engine.unify_with_self(
+            type_engine.unify(
                 ctx.declaration_engine,
                 then.return_type,
                 ty_to_check,
-                ctx.self_type(),
                 &then.span,
                 "`then` branch must return expected type.",
                 None
@@ -54,11 +53,10 @@ pub(crate) fn instantiate_if_expression(
         if !else_deterministically_aborts {
             // if this does not deterministically_abort, check the block return type
             append!(
-                type_engine.unify_with_self(
+                type_engine.unify(
                     ctx.declaration_engine,
                     r#else.return_type,
                     ty_to_check,
-                    ctx.self_type(),
                     &r#else.span,
                     "`else` branch must return expected type.",
                     None
@@ -75,11 +73,10 @@ pub(crate) fn instantiate_if_expression(
     });
     // if there is a type annotation, then the else branch must exist
     if !else_deterministically_aborts && !then_deterministically_aborts {
-        let (mut new_warnings, mut new_errors) = type_engine.unify_with_self(
+        let (mut new_warnings, mut new_errors) = type_engine.unify(
             ctx.declaration_engine,
             then.return_type,
             r#else_ret_ty,
-            ctx.self_type(),
             &span,
             "The two branches of an if expression must return the same type.",
             None,

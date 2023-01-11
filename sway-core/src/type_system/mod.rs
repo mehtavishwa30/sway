@@ -3,7 +3,6 @@ mod copy_types;
 mod create_type_id;
 mod length;
 mod occurs_check;
-mod replace_self_type;
 mod resolved_type;
 mod trait_constraint;
 mod type_argument;
@@ -22,7 +21,6 @@ pub(crate) use copy_types::*;
 pub(crate) use create_type_id::*;
 pub use length::*;
 use occurs_check::*;
-pub(crate) use replace_self_type::*;
 pub(crate) use resolved_type::*;
 pub(crate) use trait_constraint::*;
 pub use type_argument::*;
@@ -73,6 +71,7 @@ fn generic_enum_resolution() {
             name_ident: generic_name.clone(),
             trait_constraints: vec![],
             trait_constraints_span: sp.clone(),
+            is_self_type: false,
         }),
     );
     let placeholder_type_param = TypeParameter {
@@ -81,6 +80,7 @@ fn generic_enum_resolution() {
         name_ident: generic_name.clone(),
         trait_constraints: vec![],
         trait_constraints_span: sp.clone(),
+        is_self_type: false,
     };
     let variant_types = vec![ty::TyEnumVariant {
         name: a_name.clone(),
@@ -121,6 +121,7 @@ fn generic_enum_resolution() {
         name_ident: generic_name,
         trait_constraints: vec![],
         trait_constraints_span: sp.clone(),
+        is_self_type: false,
     };
     let ty_2 = type_engine.insert_type(
         &declaration_engine,

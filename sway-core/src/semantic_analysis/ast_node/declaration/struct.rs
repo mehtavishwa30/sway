@@ -1,4 +1,5 @@
 use sway_error::error::CompileError;
+use sway_types::Spanned;
 
 use crate::{
     error::*,
@@ -14,6 +15,10 @@ impl ty::TyStructDeclaration {
     ) -> CompileResult<Self> {
         let mut warnings = vec![];
         let mut errors = vec![];
+
+        let type_engine = ctx.type_engine;
+        let declaration_engine = ctx.declaration_engine;
+        let engines = ctx.engines();
 
         let StructDeclaration {
             name,
@@ -47,6 +52,12 @@ impl ty::TyStructDeclaration {
             ));
         }
 
+        // Create the type param for the self type and add it to the struct
+        // params. This will also add it to the namespace.
+        let self_type_param = TypeParameter::new_self_type_param(ctx.by_ref(), &name.span());
+        let self_type_id = self_type_param.type_id;
+        new_type_parameters.push(self_type_param);
+
         // type check the fields
         let mut new_fields = vec![];
         for field in fields.into_iter() {
@@ -60,13 +71,28 @@ impl ty::TyStructDeclaration {
 
         // create the struct decl
         let decl = ty::TyStructDeclaration {
-            name,
+            name: name.clone(),
             type_parameters: new_type_parameters,
             fields: new_fields,
             visibility,
             span,
             attributes,
         };
+
+        // Unify the type of the new struct with the self type param.
+        check!(
+            CompileResult::from(type_engine.unify(
+                declaration_engine,
+                decl.create_type_id(engines),
+                self_type_id,
+                &name.span(),
+                "self type",
+                None
+            )),
+            return err(warnings, errors),
+            warnings,
+            errors
+        );
 
         ok(decl, warnings, errors)
     }
@@ -80,7 +106,7 @@ impl ty::TyStructField {
         let declaration_engine = ctx.declaration_engine;
         let initial_type_id = type_engine.insert_type(declaration_engine, field.type_info);
         let r#type = check!(
-            ctx.resolve_type_with_self(
+            ctx.resolve_type(
                 initial_type_id,
                 &field.type_span,
                 EnforceTypeArguments::Yes,

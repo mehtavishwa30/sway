@@ -787,6 +787,7 @@ fn generic_params_opt_to_type_parameters(
                     name_ident: ident,
                     trait_constraints: Vec::new(),
                     trait_constraints_span: Span::dummy(),
+                    is_self_type: false,
                 }
             })
             .collect::<Vec<_>>(),
@@ -911,7 +912,7 @@ fn fn_args_to_function_parameters(
                 is_reference: ref_self.is_some(),
                 is_mutable: mutable_self.is_some(),
                 mutability_span,
-                type_info: TypeInfo::SelfType,
+                type_info: TypeInfo::new_self_type_custom(&self_token.span()),
                 type_span: self_token.span(),
             }];
             if let Some((_comma_token, args)) = args_opt {
@@ -950,7 +951,7 @@ pub(crate) fn type_name_to_type_info_opt(name: &Ident) -> Option<TypeInfo> {
         "b256" => Some(TypeInfo::B256),
         "raw_ptr" => Some(TypeInfo::RawUntypedPtr),
         "raw_slice" => Some(TypeInfo::RawUntypedSlice),
-        "Self" | "self" => Some(TypeInfo::SelfType),
+        "Self" | "self" => Some(TypeInfo::new_self_type_custom(&name.span())),
         "Contract" => Some(TypeInfo::Contract),
         _other => None,
     }
@@ -2955,6 +2956,7 @@ fn ty_to_type_parameter(
                 name_ident: underscore_token.into(),
                 trait_constraints: Default::default(),
                 trait_constraints_span: Span::dummy(),
+                is_self_type: false,
             });
         }
         Ty::Tuple(..) => panic!("tuple types are not allowed in this position"),
@@ -2974,6 +2976,7 @@ fn ty_to_type_parameter(
         name_ident,
         trait_constraints: Vec::new(),
         trait_constraints_span: Span::dummy(),
+        is_self_type: false,
     })
 }
 
@@ -3348,7 +3351,7 @@ fn error_if_self_param_is_not_allowed(
     fn_kind: &str,
 ) -> Result<(), ErrorEmitted> {
     for param in parameters {
-        if matches!(param.type_info, TypeInfo::SelfType) {
+        if param.type_info.is_self_type() {
             let error = ConvertParseTreeError::SelfParameterNotAllowedForFn {
                 fn_kind: fn_kind.to_owned(),
                 span: param.type_span.clone(),

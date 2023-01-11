@@ -51,7 +51,11 @@ pub(crate) fn insert_supertraits_into_namespace(
 
                 // Right now we don't parse type arguments for supertraits, so
                 // we should give this error message to users.
-                if !trait_decl.type_parameters.is_empty() {
+                if trait_decl
+                    .type_parameters
+                    .iter()
+                    .any(|type_param| !type_param.is_self_type)
+                {
                     errors.push(CompileError::Unimplemented(
                         "Using generic traits as supertraits is not supported yet.",
                         supertrait.name.span(),

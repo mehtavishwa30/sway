@@ -118,7 +118,6 @@ pub enum TypeInfo {
         name: Ident,
         type_arguments: Option<Vec<TypeArgument>>,
     },
-    SelfType,
     B256,
     /// This means that specific type of a number is not yet known. It will be
     /// determined via inference at a later time.
@@ -209,9 +208,6 @@ impl HashWithEngines for TypeInfo {
             TypeInfo::Unknown => {
                 state.write_u8(12);
             }
-            TypeInfo::SelfType => {
-                state.write_u8(13);
-            }
             TypeInfo::UnknownGeneric {
                 name,
                 trait_constraints,
@@ -261,7 +257,6 @@ impl PartialEqWithEngines for TypeInfo {
         match (self, other) {
             (Self::Unknown, Self::Unknown)
             | (Self::Boolean, Self::Boolean)
-            | (Self::SelfType, Self::SelfType)
             | (Self::B256, Self::B256)
             | (Self::Numeric, Self::Numeric)
             | (Self::Contract, Self::Contract)
@@ -388,7 +383,6 @@ impl DisplayWithEngines for TypeInfo {
                     .collect::<Vec<String>>();
                 format!("({})", field_strs.join(", "))
             }
-            SelfType => "Self".into(),
             B256 => "b256".into(),
             Numeric => "numeric".into(),
             Contract => "contract".into(),
@@ -527,7 +521,6 @@ impl UnconstrainedTypeParameters for TypeInfo {
             | TypeInfo::UnsignedInteger(_)
             | TypeInfo::Boolean
             | TypeInfo::ContractCaller { .. }
-            | TypeInfo::SelfType
             | TypeInfo::B256
             | TypeInfo::Numeric
             | TypeInfo::Contract
@@ -541,6 +534,33 @@ impl UnconstrainedTypeParameters for TypeInfo {
 }
 
 impl TypeInfo {
+    pub(crate) fn new_self_type_custom(span: &Span) -> TypeInfo {
+        TypeInfo::Custom {
+            name: Ident::new_with_override("Self", span.clone()),
+            type_arguments: None,
+        }
+        // TODO: we will want to use unknown generic eventually so that there can be trait constraints on self
+        // TypeInfo::UnknownGeneric {
+        //     name: Ident::new_with_override("Self", span.clone()),
+        //     trait_constraints: VecSet(vec![]),
+        // }
+    }
+
+    pub(crate) fn new_self_type_generic(span: &Span) -> TypeInfo {
+        TypeInfo::UnknownGeneric {
+            name: Ident::new_with_override("Self", span.clone()),
+            trait_constraints: VecSet(vec![]),
+        }
+    }
+
+    pub fn is_self_type(&self) -> bool {
+        match self {
+            TypeInfo::Custom { name, .. } => name.as_str() == "Self",
+            TypeInfo::UnknownGeneric { name, .. } => name.as_str() == "Self",
+            _ => false,
+        }
+    }
+
     pub fn json_abi_str(&self, type_engine: &TypeEngine) -> String {
         use TypeInfo::*;
         match self {
@@ -564,7 +584,6 @@ impl TypeInfo {
                     .collect::<Vec<String>>();
                 format!("({})", field_strs.join(", "))
             }
-            SelfType => "Self".into(),
             B256 => "b256".into(),
             Numeric => "u64".into(), // u64 is the default
             Contract => "contract".into(),
@@ -912,7 +931,6 @@ impl TypeInfo {
             | TypeInfo::Boolean
             | TypeInfo::Tuple(_)
             | TypeInfo::ContractCaller { .. }
-            | TypeInfo::SelfType
             | TypeInfo::B256
             | TypeInfo::Numeric
             | TypeInfo::RawUntypedPtr
@@ -1022,7 +1040,6 @@ impl TypeInfo {
                 | TypeInfo::UnsignedInteger(_)
                 | TypeInfo::Boolean
                 | TypeInfo::ContractCaller { .. }
-                | TypeInfo::SelfType
                 | TypeInfo::B256
                 | TypeInfo::Numeric
                 | TypeInfo::RawUntypedPtr
@@ -1088,7 +1105,6 @@ impl TypeInfo {
             | TypeInfo::UnsignedInteger(_)
             | TypeInfo::Boolean
             | TypeInfo::ContractCaller { .. }
-            | TypeInfo::SelfType
             | TypeInfo::B256
             | TypeInfo::Numeric
             | TypeInfo::Contract
@@ -1122,7 +1138,6 @@ impl TypeInfo {
             | TypeInfo::RawUntypedSlice
             | TypeInfo::ContractCaller { .. }
             | TypeInfo::Custom { .. }
-            | TypeInfo::SelfType
             | TypeInfo::Str(_)
             | TypeInfo::Contract
             | TypeInfo::Array(_, _)
@@ -1163,7 +1178,6 @@ impl TypeInfo {
             TypeInfo::Unknown
             | TypeInfo::UnknownGeneric { .. }
             | TypeInfo::ContractCaller { .. }
-            | TypeInfo::SelfType
             | TypeInfo::Storage { .. }
             | TypeInfo::Placeholder(_) => {
                 errors.push(CompileError::Unimplemented(
@@ -1311,7 +1325,7 @@ impl TypeInfo {
             | TypeInfo::RawUntypedSlice
             | TypeInfo::Contract
             | TypeInfo::Placeholder(_) => {}
-            TypeInfo::Custom { .. } | TypeInfo::SelfType => {
+            TypeInfo::Custom { .. } => {
                 errors.push(CompileError::Internal(
                     "did not expect to find this type here",
                     span.clone(),
@@ -1654,7 +1668,6 @@ impl TypeInfo {
             | TypeInfo::UnknownGeneric { .. }
             | TypeInfo::ContractCaller { .. }
             | TypeInfo::Custom { .. }
-            | TypeInfo::SelfType
             | TypeInfo::Tuple(_)
             | TypeInfo::Array(_, _)
             | TypeInfo::Contract

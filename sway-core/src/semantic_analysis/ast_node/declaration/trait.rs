@@ -39,14 +39,12 @@ impl ty::TyTraitDeclaration {
             })
         }
 
-        let type_engine = ctx.type_engine;
         let declaration_engine = ctx.declaration_engine;
         let engines = ctx.engines();
 
         // A temporary namespace for checking within the trait's scope.
-        let self_type = type_engine.insert_type(declaration_engine, TypeInfo::SelfType);
         let mut trait_namespace = ctx.namespace.clone();
-        let mut ctx = ctx.scoped(&mut trait_namespace).with_self_type(self_type);
+        let mut ctx = ctx.scoped(&mut trait_namespace);
 
         // type check the type parameters, which will insert them into the namespace
         let mut new_type_parameters = vec![];
@@ -59,10 +57,16 @@ impl ty::TyTraitDeclaration {
             ));
         }
 
+        // Create the type param for the self type and add it to the trait type
+        // params. This will also add it to the namespace.
+        let self_type_param = TypeParameter::new_self_type_param(ctx.by_ref(), &name.span());
+        let self_type_id = self_type_param.type_id;
+        new_type_parameters.push(self_type_param);
+
         // Recursively make the interface surfaces and methods of the
         // supertraits available to this trait.
         check!(
-            insert_supertraits_into_namespace(ctx.by_ref(), self_type, &supertraits),
+            insert_supertraits_into_namespace(ctx.by_ref(), self_type_id, &supertraits),
             return err(warnings, errors),
             warnings,
             errors
@@ -97,7 +101,7 @@ impl ty::TyTraitDeclaration {
                     is_absolute: false,
                 },
                 new_type_parameters.iter().map(|x| x.into()).collect(),
-                self_type,
+                self_type_id,
                 &dummy_interface_surface,
                 &span,
                 false,
@@ -307,7 +311,7 @@ impl ty::TyTraitDeclaration {
         // Retrieve the trait methods for this trait. Transform them into the
         // correct typing for this impl block by using the type parameters from
         // the original trait declaration and the given type arguments.
-        let type_mapping = TypeMapping::from_type_parameters_and_type_arguments(
+        let mut type_mapping = TypeMapping::from_type_parameters_and_type_arguments(
             type_parameters
                 .iter()
                 .map(|type_param| type_param.type_id)
@@ -317,6 +321,7 @@ impl ty::TyTraitDeclaration {
                 .map(|type_arg| type_arg.type_id)
                 .collect(),
         );
+        type_mapping.extend_with_self_type(engines, type_id);
         for decl_id in interface_surface.iter() {
             let mut method = check!(
                 CompileResult::from(
@@ -326,7 +331,6 @@ impl ty::TyTraitDeclaration {
                 warnings,
                 errors
             );
-            method.replace_self_type(engines, type_id);
             method.copy_types(&type_mapping, engines);
             all_methods.push(
                 ctx.declaration_engine
@@ -343,7 +347,6 @@ impl ty::TyTraitDeclaration {
                 warnings,
                 errors
             );
-            method.replace_self_type(engines, type_id);
             method.copy_types(&type_mapping, engines);
             all_methods.push(
                 ctx.declaration_engine

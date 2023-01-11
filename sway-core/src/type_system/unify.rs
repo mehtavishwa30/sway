@@ -94,7 +94,6 @@ impl<'a> Unifier<'a> {
             // If they have the same `TypeInfo`, then we either compare them for
             // correctness or perform further unification.
             (Boolean, Boolean) => (vec![], vec![]),
-            (SelfType, SelfType) => (vec![], vec![]),
             (B256, B256) => (vec![], vec![]),
             (Numeric, Numeric) => (vec![], vec![]),
             (Contract, Contract) => (vec![], vec![]),
@@ -117,7 +116,17 @@ impl<'a> Unifier<'a> {
                     fields: efs,
                 },
             ) => self.unify_structs(received, expected, span, (rn, rpts, rfs), (en, etps, efs)),
-            // Let empty enums to coerce to any other type. This is useful for Never enum.
+            // Let empty enums to coerce to any other type, except for the self
+            // type. This is useful for the Never enum.
+            (
+                ref r @ Enum {
+                    variant_types: ref rvs,
+                    ..
+                },
+                e,
+            ) if rvs.is_empty() && e.is_self_type() => {
+                self.replace_expected_with_received(received, expected, r.clone(), &e, span)
+            }
             (
                 Enum {
                     variant_types: rvs, ..

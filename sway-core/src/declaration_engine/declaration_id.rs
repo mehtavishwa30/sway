@@ -1,11 +1,6 @@
 use sway_types::{Span, Spanned};
 
-use crate::{
-    engine_threading::*,
-    language::ty,
-    type_system::{CopyTypes, TypeMapping},
-    ReplaceSelfType, TypeId,
-};
+use crate::{engine_threading::*, language::ty, type_system::*};
 
 use super::{DeclMapping, DeclarationEngine, ReplaceDecls, ReplaceFunctionImplementingType};
 
@@ -57,15 +52,6 @@ impl CopyTypes for DeclarationId {
         let declaration_engine = engines.de();
         let mut decl = declaration_engine.look_up_decl_id(self.clone());
         decl.copy_types(type_mapping, engines);
-        declaration_engine.replace_decl_id(self.clone(), decl);
-    }
-}
-
-impl ReplaceSelfType for DeclarationId {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        let declaration_engine = engines.de();
-        let mut decl = declaration_engine.look_up_decl_id(self.clone());
-        decl.replace_self_type(engines, self_type);
         declaration_engine.replace_decl_id(self.clone(), decl);
     }
 }
@@ -126,19 +112,6 @@ impl DeclarationId {
         let declaration_engine = engines.de();
         let mut decl = declaration_engine.look_up_decl_id(self.clone());
         decl.copy_types(type_mapping, engines);
-        declaration_engine
-            .insert(decl, self.1.clone())
-            .with_parent(declaration_engine, self.clone())
-    }
-
-    pub(crate) fn replace_self_type_and_insert_new(
-        &self,
-        engines: Engines<'_>,
-        self_type: TypeId,
-    ) -> DeclarationId {
-        let declaration_engine = engines.de();
-        let mut decl = declaration_engine.look_up_decl_id(self.clone());
-        decl.replace_self_type(engines, self_type);
         declaration_engine
             .insert(decl, self.1.clone())
             .with_parent(declaration_engine, self.clone())

@@ -29,7 +29,7 @@ pub(crate) fn struct_instantiation(
         span: inner_span,
     } = call_path_binding;
     let type_info = match (suffix.as_str(), type_arguments.is_empty()) {
-        ("Self", true) => TypeInfo::SelfType,
+        ("Self", true) => TypeInfo::new_self_type_custom(&suffix.span()),
         ("Self", false) => {
             errors.push(CompileError::TypeArgumentsNotAllowed {
                 span: suffix.span(),
@@ -57,7 +57,7 @@ pub(crate) fn struct_instantiation(
 
     // resolve the type of the struct decl
     let type_id = check!(
-        ctx.resolve_type_with_self(
+        ctx.resolve_type(
             type_engine.insert_type(declaration_engine, type_info),
             &inner_span,
             EnforceTypeArguments::No,

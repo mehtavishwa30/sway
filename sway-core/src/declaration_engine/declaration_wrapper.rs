@@ -3,12 +3,7 @@ use std::fmt;
 use sway_error::error::CompileError;
 use sway_types::Span;
 
-use crate::{
-    engine_threading::*,
-    language::ty,
-    type_system::{CopyTypes, TypeMapping},
-    ReplaceSelfType, TypeId,
-};
+use crate::{engine_threading::*, language::ty, type_system::*};
 
 use super::{DeclMapping, ReplaceDecls, ReplaceFunctionImplementingType};
 
@@ -77,23 +72,6 @@ impl CopyTypes for DeclarationWrapper {
             DeclarationWrapper::Abi(_) => {}
             DeclarationWrapper::Constant(_) => {}
             DeclarationWrapper::Enum(decl) => decl.copy_types(type_mapping, engines),
-        }
-    }
-}
-
-impl ReplaceSelfType for DeclarationWrapper {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        match self {
-            DeclarationWrapper::Unknown => {}
-            DeclarationWrapper::Function(decl) => decl.replace_self_type(engines, self_type),
-            DeclarationWrapper::Trait(decl) => decl.replace_self_type(engines, self_type),
-            DeclarationWrapper::TraitFn(decl) => decl.replace_self_type(engines, self_type),
-            DeclarationWrapper::ImplTrait(decl) => decl.replace_self_type(engines, self_type),
-            DeclarationWrapper::Struct(decl) => decl.replace_self_type(engines, self_type),
-            DeclarationWrapper::Storage(_) => {}
-            DeclarationWrapper::Abi(_) => {}
-            DeclarationWrapper::Constant(_) => {}
-            DeclarationWrapper::Enum(decl) => decl.replace_self_type(engines, self_type),
         }
     }
 }

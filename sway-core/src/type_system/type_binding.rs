@@ -114,7 +114,7 @@ impl TypeBinding<CallPath<(TypeInfo, Span)>> {
 
         // resolve the type of the type info object
         let type_id = check!(
-            ctx.resolve_type_with_self(
+            ctx.resolve_type(
                 type_engine.insert_type(declaration_engine, type_info),
                 &type_info_span,
                 EnforceTypeArguments::No,
@@ -152,7 +152,7 @@ impl TypeBinding<CallPath> {
         // replace the self types inside of the type arguments
         for type_argument in self.type_arguments.iter_mut() {
             check!(
-                ctx.resolve_type_with_self(
+                ctx.resolve_type(
                     type_argument.type_id,
                     &type_argument.span,
                     EnforceTypeArguments::Yes,

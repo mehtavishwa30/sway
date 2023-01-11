@@ -39,17 +39,6 @@ impl CopyTypes for TyEnumDeclaration {
     }
 }
 
-impl ReplaceSelfType for TyEnumDeclaration {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.variants
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-        self.type_parameters
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-    }
-}
-
 impl CreateTypeId for TyEnumDeclaration {
     fn create_type_id(&self, engines: Engines<'_>) -> TypeId {
         let type_engine = engines.te();
@@ -59,7 +48,12 @@ impl CreateTypeId for TyEnumDeclaration {
             TypeInfo::Enum {
                 name: self.name.clone(),
                 variant_types: self.variants.clone(),
-                type_parameters: self.type_parameters.clone(),
+                type_parameters: self
+                    .type_parameters
+                    .clone()
+                    .into_iter()
+                    .filter(|type_param| !type_param.is_self_type)
+                    .collect(),
             },
         )
     }
@@ -72,8 +66,11 @@ impl Spanned for TyEnumDeclaration {
 }
 
 impl MonomorphizeHelper for TyEnumDeclaration {
-    fn type_parameters(&self) -> &[TypeParameter] {
-        &self.type_parameters
+    fn type_parameters(&self) -> Vec<&TypeParameter> {
+        self.type_parameters
+            .iter()
+            .filter(|type_param| !type_param.is_self_type)
+            .collect()
     }
 
     fn name(&self) -> &Ident {
@@ -148,11 +145,5 @@ impl PartialEqWithEngines for TyEnumVariant {
 impl CopyTypes for TyEnumVariant {
     fn copy_types_inner(&mut self, type_mapping: &TypeMapping, engines: Engines<'_>) {
         self.type_id.copy_types(type_mapping, engines);
-    }
-}
-
-impl ReplaceSelfType for TyEnumVariant {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_id.replace_self_type(engines, self_type);
     }
 }

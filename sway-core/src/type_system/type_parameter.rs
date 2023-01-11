@@ -23,6 +23,7 @@ pub struct TypeParameter {
     pub name_ident: Ident,
     pub(crate) trait_constraints: Vec<TraitConstraint>,
     pub(crate) trait_constraints_span: Span,
+    pub is_self_type: bool,
 }
 
 // NOTE: Hash and PartialEq must uphold the invariant:
@@ -62,15 +63,6 @@ impl CopyTypes for TypeParameter {
     }
 }
 
-impl ReplaceSelfType for TypeParameter {
-    fn replace_self_type(&mut self, engines: Engines<'_>, self_type: TypeId) {
-        self.type_id.replace_self_type(engines, self_type);
-        self.trait_constraints
-            .iter_mut()
-            .for_each(|x| x.replace_self_type(engines, self_type));
-    }
-}
-
 impl Spanned for TypeParameter {
     fn span(&self) -> Span {
         self.name_ident.span()
@@ -105,6 +97,7 @@ impl TypeParameter {
             name_ident,
             mut trait_constraints,
             trait_constraints_span,
+            is_self_type,
             ..
         } = type_parameter;
 
@@ -154,8 +147,36 @@ impl TypeParameter {
             initial_type_id,
             trait_constraints,
             trait_constraints_span,
+            is_self_type,
         };
         ok(type_parameter, warnings, errors)
+    }
+
+    pub(crate) fn new_self_type_param(ctx: TypeCheckContext, span: &Span) -> TypeParameter {
+        let type_engine = ctx.type_engine;
+        let declaration_engine = ctx.declaration_engine;
+
+        let self_name = Ident::new_with_override("Self", span.clone());
+        let type_id =
+            type_engine.insert_type(declaration_engine, TypeInfo::new_self_type_generic(span));
+
+        // Insert the type parameter into the namespace as a dummy type
+        // declaration.
+        let type_parameter_decl = ty::TyDeclaration::GenericTypeForFunctionScope {
+            name: self_name.clone(),
+            type_id,
+        };
+        ctx.namespace
+            .insert_symbol(self_name.clone(), type_parameter_decl);
+
+        TypeParameter {
+            type_id,
+            initial_type_id: type_id,
+            name_ident: self_name.clone(),
+            trait_constraints: vec![],
+            trait_constraints_span: self_name.span(),
+            is_self_type: true,
+        }
     }
 
     /// Returns the initial type ID of a TypeParameter. Also updates the provided list of types to
