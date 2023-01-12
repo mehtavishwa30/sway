@@ -1115,10 +1115,8 @@ fn ty_to_type_argument(
     let type_engine = engines.te();
     let decl_engine = engines.de();
     let span = ty.span();
-    let initial_type_id = type_engine.insert_type(
-        decl_engine,
-        ty_to_type_info(context, handler, engines, ty)?,
-    );
+    let initial_type_id =
+        type_engine.insert_type(decl_engine, ty_to_type_info(context, handler, engines, ty)?);
     let type_argument = TypeArgument {
         type_id: initial_type_id,
         initial_type_id,
@@ -3422,10 +3420,8 @@ fn generic_args_to_type_arguments(
         .into_iter()
         .map(|ty| {
             let span = ty.span();
-            let type_id = type_engine.insert_type(
-                decl_engine,
-                ty_to_type_info(context, handler, engines, ty)?,
-            );
+            let type_id = type_engine
+                .insert_type(decl_engine, ty_to_type_info(context, handler, engines, ty)?);
             Ok(TypeArgument {
                 type_id,
                 initial_type_id: type_id,

@@ -46,7 +46,7 @@ impl TyProgram {
         // Validate all submodules
         let mut configurables = Vec::<TyConstantDeclaration>::new();
         for (_, submodule) in &root.submodules {
-            let configurables_in_submodule = check!(
+            check!(
                 Self::validate_root(
                     engines,
                     &submodule.module,
@@ -58,22 +58,13 @@ impl TyProgram {
                 continue,
                 warnings,
                 errors
-            )
-            .2;
-            if !configurables.is_empty() && !configurables_in_submodule.is_empty() {
-                errors.push(CompileError::ConfigurablesInMultipleModules {
-                    span: configurables_in_submodule[0].span.clone(),
-                });
-            }
-
-            configurables.extend(configurables_in_submodule);
+            );
         }
 
         let mut mains = Vec::new();
         let mut declarations = Vec::<TyDeclaration>::new();
         let mut abi_entries = Vec::new();
         let mut fn_declarations = std::collections::HashSet::new();
-        let mut found_first_configurable_in_module = false;
         for node in &root.all_nodes {
             match &node.content {
                 TyAstNodeContent::Declaration(TyDeclaration::FunctionDeclaration(decl_id)) => {
@@ -98,13 +89,7 @@ impl TyProgram {
                 TyAstNodeContent::Declaration(TyDeclaration::ConstantDeclaration(decl_id)) => {
                     match decl_engine.get_constant(decl_id.clone(), &node.span) {
                         Ok(config_decl) if config_decl.is_configurable => {
-                            if !found_first_configurable_in_module && !configurables.is_empty() {
-                                errors.push(CompileError::ConfigurablesInMultipleModules {
-                                    span: config_decl.span.clone(),
-                                });
-                            }
                             configurables.push(config_decl);
-                            found_first_configurable_in_module = true;
                         }
                         _ => {}
                     }
@@ -190,7 +175,14 @@ impl TyProgram {
         // Perform other validation based on the tree type.
         let typed_program_kind = match kind {
             parsed::TreeType::Contract => TyProgramKind::Contract { abi_entries },
-            parsed::TreeType::Library { name } => TyProgramKind::Library { name },
+            parsed::TreeType::Library { name } => {
+                if !configurables.is_empty() {
+                    errors.push(CompileError::ConfigurableInLibrary {
+                        span: configurables[0].name.span(),
+                    });
+                }
+                TyProgramKind::Library { name }
+            }
             parsed::TreeType::Predicate => {
                 // A predicate must have a main function and that function must return a boolean.
                 if mains.is_empty() {

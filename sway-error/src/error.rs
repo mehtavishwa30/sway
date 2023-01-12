@@ -711,8 +711,8 @@ pub enum CompileError {
         missing_impl_attribute: bool,
         span: Span,
     },
-    #[error("Configurable constants found in multiple modules.")]
-    ConfigurablesInMultipleModules { span: Span },
+    #[error("Configurable constants are not allowed in libraries.")]
+    ConfigurableInLibrary { span: Span },
 }
 
 impl std::convert::From<TypeError> for CompileError {
@@ -900,7 +900,7 @@ impl Spanned for CompileError {
             DisallowedWhileInPredicate { span } => span.clone(),
             CoinsPassedToNonPayableMethod { span, .. } => span.clone(),
             TraitImplPayabilityMismatch { span, .. } => span.clone(),
-            ConfigurablesInMultipleModules { span, .. } => span.clone(),
+            ConfigurableInLibrary { span } => span.clone(),
         }
     }
 }
