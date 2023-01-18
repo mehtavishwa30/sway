@@ -1,6 +1,6 @@
 # Libraries
 
-Libraries in Sway are files used to define new common behavior. The most prominent example of this is the [Sway Standard Library](../introduction/standard_library.html) that is made implicitly available to all Forc projects created using `forc new`.
+Libraries in Sway are files that are used to define new common behavior. The most prominent example of this is the [Sway Standard Library](../introduction/standard_library.html) that is made implicitly available to all Forc projects created using `forc new`.
 ## Writing Libraries
 
 Libraries are defined using the `library` keyword at the beginning of a file, followed by a name so that they can be imported.
@@ -111,7 +111,8 @@ dep internal_lib; // Assuming the library name in `internal_lib.sw` is `internal
 
 use internal_lib::mint;
 
-// `mint` from `internal_library` is now available in this file
+// `mint` from `internal_library`
+is now available throughout this file
 ```
 
 ### External Libraries
@@ -148,7 +149,8 @@ Once the library dependency is added to the `toml` file, you can import items fr
 ```sway
 use external_library::mint;
 
-// `mint` from `external_library` is now available in this file
+// `mint` from `external_library`
+is now available throughout this file
 ```
 
 Wildcard imports using `*` are supported, but it is generally recommended to use explicit imports where possible.
@@ -157,7 +159,7 @@ Wildcard imports using `*` are supported, but it is generally recommended to use
 
 ## Reference Sway Libraries
 
-The repository [`sway-libs`](https://github.com/FuelLabs/sway-libs/) is a collection of external libraries that you can import and make use of in your Fuel applications. These libraries are meant to be learning references of common use-cases valuable for dapp development.
+The repository [`sway-libs`](https://github.com/FuelLabs/sway-libs/) is a collection of external libraries that you can import and use in your Fuel applications. Sway libraries are meant to be learning references for common use-cases valuable for dapp development.
 
 Some Sway Libraries to try out:
 - [Binary Merkle Proof](https://github.com/FuelLabs/sway-libs/blob/master/sway_libs/src/merkle_proof)
@@ -169,7 +171,7 @@ Some Sway Libraries to try out:
 
 ### Example
 
-You can import and use a Sway Library such as the [NFT](https://github.com/FuelLabs/sway-libs/tree/master/sway_libs/src/nft) library just like any other external library.
+You can import and use a Sway reference library such as the [NFT](https://github.com/FuelLabs/sway-libs/tree/master/sway_libs/src/nft) library just like any other external library.
 
 ```sway
 use sway_libs::nft::{
@@ -178,6 +180,9 @@ use sway_libs::nft::{
     owner_of,
     approve,
 };
+
+// 'mint', 'transfer', 'owner_of', and 'approve'
+are now available throughout this file
 ```
 Once imported, you can use the following basic functionality of the library in your smart contract:
 - Minting tokens
